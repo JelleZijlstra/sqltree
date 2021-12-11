@@ -11,6 +11,17 @@ from .visitor import Visitor
 class Formatter(Visitor[None]):
     pieces: List[str] = field(default_factory=list)
 
+    def visit(self, node: p.Node) -> None:
+        if isinstance(node, p.Statement):
+            for comment in node.leading_comments:
+                self.pieces.append(comment.text)
+        super().visit(node)
+        if isinstance(node, p.Leaf):
+            if node.token.comments:
+                self.pieces.append(" ")
+            for comment in node.token.comments:
+                self.pieces.append(comment.text)
+
     def visit_Select(self, node: p.Select) -> None:
         self.visit(node.select_kw)
         self.pieces.append(" ")

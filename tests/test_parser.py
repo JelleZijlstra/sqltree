@@ -9,6 +9,7 @@ T = Token(TokenType.keyword, "x", Location("x", 1, 1))
 def test() -> None:
     tree = sqltree("SELECT * FROM a")
     assert tree == p.Select(
+        (),
         p.Keyword(T, "SELECT"),
         [p.SelectExpr(p.Star(T), None, None, None)],
         p.Keyword(T, "FROM"),
@@ -18,9 +19,10 @@ def test() -> None:
     )
 
     tree = sqltree(
-        "SELECT a, b AS c FROM a WHERE x = 3 * 3 + 2 * 4 AND y = 'x' AND z = {x}"
+        "SELECT a, b AS c FROM a WHERE x = 3 * 3 + 2 * 4 AND y = 'x' AND z NOT IN {x}"
     )
     assert tree == p.Select(
+        (),
         p.Keyword(T, "SELECT"),
         [
             p.SelectExpr(p.Identifier(T, "a"), None, None, p.Punctuation(T, ",")),
@@ -57,7 +59,18 @@ def test() -> None:
             ),
             p.Keyword(T, "AND"),
             p.BinOp(
-                p.Identifier(T, "z"), p.Punctuation(T, "="), p.Placeholder(T, "{x}")
+                p.Identifier(T, "z"), p.Keyword(T, "NOT IN"), p.Placeholder(T, "{x}")
             ),
         ),
+    )
+
+    tree = sqltree("-- comment\nSELECT * FROM a")
+    assert tree == p.Select(
+        (p.Comment(T, "-- comment\n"),),
+        p.Keyword(T, "SELECT"),
+        [p.SelectExpr(p.Star(T), None, None, None)],
+        p.Keyword(T, "FROM"),
+        p.Identifier(T, "a"),
+        None,
+        None,
     )

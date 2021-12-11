@@ -12,7 +12,7 @@ def check(sql: str, tokens: Sequence[Token]) -> None:
 
 
 def test_tokenize() -> None:
-    sql = "SELECT * FROM table WHERE x = 3 AND y = 'x' AND z = {x} AND alpha = %s"
+    sql = "SELECT * FROM table WHERE x = 3 AND y = 'x' AND z = {x} AND alpha = %s -- x"
     L = partial(Location, sql)
     check(
         sql,
@@ -37,5 +37,22 @@ def test_tokenize() -> None:
             TokenType.identifier.make("alpha", L(60, 64)),
             TokenType.punctuation.make("=", L(66, 66)),
             TokenType.placeholder.make("%s", L(68, 69)),
+            TokenType.comment.make("-- x", L(71, 74)),
+        ],
+    )
+
+
+def test_comment() -> None:
+    sql = "SELECT /* c */ * FROM table # x"
+    L = partial(Location, sql)
+    check(
+        sql,
+        [
+            TokenType.identifier.make("SELECT", L(0, 5)),
+            TokenType.comment.make("/* c */", L(7, 13)),
+            TokenType.punctuation.make("*", L(15, 15)),
+            TokenType.identifier.make("FROM", L(17, 20)),
+            TokenType.identifier.make("table", L(22, 26)),
+            TokenType.comment.make("# x", L(28, 30)),
         ],
     )
