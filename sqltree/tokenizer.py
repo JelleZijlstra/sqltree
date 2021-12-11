@@ -2,6 +2,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, Set
 from .dialect import Dialect
+from .location import Location
 from .peeking_iterator import PeekingIterator
 import enum
 
@@ -18,14 +19,15 @@ class TokenType(enum.Enum):
     identifier = 5
     placeholder = 6
 
-    def make(self, text: str) -> "Token":
-        return Token(self, text)
+    def make(self, text: str, loc: Location) -> "Token":
+        return Token(self, text, loc)
 
 
 @dataclass
 class Token:
     typ: TokenType
     text: str
+    loc: Location
 
 
 PUNCTUATION = {
@@ -64,25 +66,28 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
 
     pi = PeekingIterator(sql)
     while pi.has_next():
+        start_index = pi.next_pos
         char = pi.next()
         if char.isalpha():
             pi.wind_back()
             text = _consume_identifier(pi)
-            yield Token(TokenType.identifier, text)
+            token_type = TokenType.identifier
         elif char.isspace():
             continue  # Skip over whitespace
         elif char == "%":
             next_char = pi.peek()
             if next_char is not None and next_char.isalpha():
-                rest = _consume_identifier(pi)
-                yield Token(TokenType.placeholder, "%" + rest)
+                token_type = TokenType.placeholder
+                text = "%" + _consume_identifier(pi)
             else:
-                yield Token(TokenType.punctuation, "%")
+                token_type = TokenType.punctuation
+                text = "%"
         elif char in starting_char_to_continuations:
+            token_type = TokenType.punctuation
             continuations = starting_char_to_continuations[char]
             if not pi.has_next():
                 if "" in continuations:
-                    yield Token(TokenType.punctuation, char)
+                    text = char
                 else:
                     raise TokenizeError(
                         f"unexpected EOF following {char} (expected one of {continuations})"
@@ -90,9 +95,10 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             else:
                 c = pi.next()
                 if c in continuations:
-                    yield Token(TokenType.punctuation, char + c)
+                    text = char + c
                 elif "" in c:
-                    yield Token(TokenType.punctuation, char)
+                    pi.wind_back()
+                    text = char
                 else:
                     raise TokenizeError(
                         f"unexpected {c} following {char} (expected one of {continuations})"
@@ -100,14 +106,20 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
         elif char.isnumeric():
             # TODO floats, hex, other kinds of numbers?
             pi.wind_back()
-            yield Token(TokenType.number, _consume_integer(pi))
+            token_type = TokenType.number
+            text = _consume_integer(pi)
         elif char in QUOTATIONS:
-            yield Token(TokenType.string, char + _consume_until(pi, char))
+            token_type = TokenType.string
+            text = char + _consume_until(pi, char)
         elif char == "{":
-            yield Token(TokenType.placeholder, "{" + _consume_until(pi, "}"))
+            token_type = TokenType.placeholder
+            text = "{" + _consume_until(pi, "}")
         else:
-            # TODO comments
+            # TODO comments. Maybe we leave those out of the AST in the parser, then reattach
+            # them later at the nearest node we find. Or we just attach them to the token and make
+            # sure each token object stays in the AST.
             raise TokenizeError(f"unexpected character {char}")
+        yield Token(token_type, text, Location(sql, start_index, pi.next_pos - 1))
 
 
 def _consume_until(pi: PeekingIterator[str], end: str) -> str:

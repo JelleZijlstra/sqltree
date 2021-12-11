@@ -251,7 +251,7 @@ def distinguish_keywords(tokens: Iterable[Token], dialect: Dialect) -> Iterable[
         if token.typ is TokenType.identifier:
             text = token.text.upper()
             if text in KEYWORDS[dialect]:
-                yield TokenType.keyword.make(text)
+                yield TokenType.keyword.make(text, token.loc)
             else:
                 yield token
         else:
