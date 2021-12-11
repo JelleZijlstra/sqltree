@@ -47,6 +47,11 @@ class Keyword(Leaf):
 
 
 @dataclass
+class KeywordSequence(Node):
+    keywords: Sequence[Keyword]
+
+
+@dataclass
 class Punctuation(Leaf):
     text: str
 
@@ -104,6 +109,15 @@ class SelectExpr(Node):
 
 
 @dataclass
+class OrderByExpr(Node):
+    """Also used for GROUP BY."""
+
+    expr: Expression
+    direction_kw: Optional[Keyword] = field(compare=False, repr=False)
+    trailing_comma: Optional[Punctuation] = field(compare=False, repr=False)
+
+
+@dataclass
 class Comment(Leaf):
     text: str
 
@@ -117,10 +131,21 @@ class Statement(Node):
 class Select(Statement):
     select_kw: Keyword = field(compare=False, repr=False)
     select_exprs: Sequence[SelectExpr]
-    from_kw: Optional[Keyword] = field(compare=False, repr=False)
-    table: Optional[Expression]
-    where_kw: Optional[Keyword] = field(compare=False, repr=False)
-    conditions: Optional[Expression]
+    from_kw: Optional[Keyword] = field(compare=False, repr=False, default=None)
+    table: Optional[Expression] = None
+    where_kw: Optional[Keyword] = field(compare=False, repr=False, default=None)
+    conditions: Optional[Expression] = None
+    group_by_kwseq: Optional[KeywordSequence] = field(
+        compare=False, repr=False, default=None
+    )
+    group_by: Sequence[OrderByExpr] = ()
+    having_kw: Optional[Keyword] = field(compare=False, repr=False, default=None)
+    having_conditions: Optional[Expression] = None
+    order_by_kwseq: Optional[KeywordSequence] = field(
+        compare=False, repr=False, default=None
+    )
+    order_by: Sequence[OrderByExpr] = ()
+    # TODO LIMIT
 
 
 def parse(tokens: Iterable[Token]) -> Statement:
@@ -153,8 +178,8 @@ def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
 
 def _parse_select(pi: PeekingIterator[Token]) -> Select:
     select = _expect_keyword(pi, "SELECT")
+    from_kw = table = where_kw = conditions = having_kw = having_conditions = None
     select_exprs = []
-    from_kw = table = where_kw = conditions = None
     while True:
         expr = _parse_select_expr(pi)
         select_exprs.append(expr)
@@ -169,7 +194,37 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
         where_kw = _expect_keyword(pi, "WHERE")
         conditions = _parse_expression(pi)
 
-    return Select((), select, select_exprs, from_kw, table, where_kw, conditions)
+    group_by_kwseq = _maybe_consume_keyword_sequence(pi, ["GROUP", "BY"])
+    if group_by_kwseq is not None:
+        group_by = _parse_order_by_list(pi)
+    else:
+        group_by = ()
+
+    if _next_is_keyword(pi, "HAVING"):
+        having_kw = _expect_keyword(pi, "HAVING")
+        having_conditions = _parse_expression(pi)
+
+    order_by_kwseq = _maybe_consume_keyword_sequence(pi, ["ORDER", "BY"])
+    if order_by_kwseq is not None:
+        order_by = _parse_order_by_list(pi)
+    else:
+        order_by = ()
+
+    return Select(
+        (),
+        select,
+        select_exprs,
+        from_kw=from_kw,
+        table=table,
+        where_kw=where_kw,
+        conditions=conditions,
+        group_by_kwseq=group_by_kwseq,
+        group_by=group_by,
+        having_kw=having_kw,
+        having_conditions=having_conditions,
+        order_by_kwseq=order_by_kwseq,
+        order_by=order_by,
+    )
 
 
 def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
@@ -184,6 +239,30 @@ def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
     if _next_is_punctuation(pi, ","):
         trailing_comma = _expect_punctuation(pi, ",")
     return SelectExpr(expr, as_kw, alias, trailing_comma)
+
+
+def _parse_order_by_list(pi: PeekingIterator[Token]) -> Sequence[OrderByExpr]:
+    exprs = []
+    while True:
+        expr = _parse_order_by_expr(pi)
+        exprs.append(expr)
+        if expr.trailing_comma is None:
+            return exprs
+
+
+def _parse_order_by_expr(pi: PeekingIterator[Token]) -> OrderByExpr:
+    expr = _parse_expression(pi)
+    if _next_is_keyword(pi, "ASC"):
+        direction = _expect_keyword(pi, "ASC")
+    elif _next_is_keyword(pi, "DESC"):
+        direction = _expect_keyword(pi, "DESC")
+    else:
+        direction = None
+    if _next_is_punctuation(pi, ","):
+        trailing_comma = _expect_punctuation(pi, ",")
+    else:
+        trailing_comma = None
+    return OrderByExpr(expr, direction, trailing_comma)
 
 
 def K(text: str) -> Tuple[TokenType, str]:
@@ -292,6 +371,28 @@ def _expect_punctuation(pi: PeekingIterator[Token], punctuation: str) -> Punctua
     if token.typ is not TokenType.punctuation or token.text != punctuation:
         raise ParseError.from_unexpected_token(token, repr(punctuation))
     return Punctuation(token, token.text)
+
+
+def _maybe_consume_keyword_sequence(
+    pi: PeekingIterator[Token], keywords: Sequence[str]
+) -> Optional[KeywordSequence]:
+    keywords_found = []
+    for token in pi:
+        if (
+            token.typ is TokenType.keyword
+            and token.text == keywords[len(keywords_found)]
+        ):
+            keywords_found.append(token)
+            if len(keywords_found) == len(keywords):
+                return KeywordSequence(
+                    [Keyword(token, token.text) for token in keywords_found]
+                )
+        else:
+            break
+
+    for _ in keywords_found:
+        pi.wind_back()
+    return None
 
 
 def _next_is_keyword(pi: PeekingIterator[Token], keyword: str) -> bool:
