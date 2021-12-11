@@ -3,7 +3,6 @@ from typing import Dict, Iterable, Set
 from .dialect import Dialect
 from .tokenizer import Token, TokenType
 
-
 # from https://dev.mysql.com/doc/refman/5.7/en/keywords.html#keywords-in-current-series
 MYSQL_KEYWORDS = {
     "ACCESSIBLE",

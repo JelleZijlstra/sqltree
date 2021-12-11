@@ -3,7 +3,7 @@ from typing import Sequence
 
 from sqltree.dialect import Dialect
 from sqltree.location import Location
-from sqltree.tokenizer import tokenize, Token, TokenType
+from sqltree.tokenizer import Token, TokenType, tokenize
 
 
 def check(sql: str, tokens: Sequence[Token]) -> None:

@@ -1,10 +1,11 @@
+import enum
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Dict, Iterable, Set
+
 from .dialect import Dialect
 from .location import Location
 from .peeking_iterator import PeekingIterator
-import enum
 
 
 class TokenizeError(Exception):

@@ -1,7 +1,7 @@
-from .keywords import distinguish_keywords
 from .dialect import Dialect
-from .tokenizer import tokenize
+from .keywords import distinguish_keywords
 from .parser import Statement, parse
+from .tokenizer import tokenize
 
 
 def sqltree(sql: str, dialect: Dialect = Dialect.mysql) -> Statement:
