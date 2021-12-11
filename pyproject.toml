@@ -1,0 +1,14 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "sqltree"
+authors = [{name = "Jelle Zijlstra", email = "jelle.zijlstra@gmail.com"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = ["License :: OSI Approved :: Apache Software License"]
+dynamic = ["version", "description"]
+
+[project.urls]
+Home = "https://github.com/JelleZijlstra/sqltree"
