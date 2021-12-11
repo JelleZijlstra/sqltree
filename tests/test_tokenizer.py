@@ -10,7 +10,7 @@ def check(sql: str, tokens: Sequence[Token]) -> None:
 
 def test_tokenize() -> None:
     check(
-        "SELECT * FROM table WHERE x = 3 AND y = 'x'",
+        "SELECT * FROM table WHERE x = 3 AND y = 'x' AND z = {x} AND alpha = %s",
         [
             TokenType.identifier.make("SELECT"),
             TokenType.punctuation.make("*"),
@@ -23,6 +23,14 @@ def test_tokenize() -> None:
             TokenType.identifier.make("AND"),
             TokenType.identifier.make("y"),
             TokenType.punctuation.make("="),
-            TokenType.identifier.make("'x'"),
+            TokenType.string.make("'x'"),
+            TokenType.identifier.make("AND"),
+            TokenType.identifier.make("z"),
+            TokenType.punctuation.make("="),
+            TokenType.placeholder.make("{x}"),
+            TokenType.identifier.make("AND"),
+            TokenType.identifier.make("alpha"),
+            TokenType.punctuation.make("="),
+            TokenType.placeholder.make("%s"),
         ],
     )

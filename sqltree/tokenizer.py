@@ -16,6 +16,7 @@ class TokenType(enum.Enum):
     string = 3
     number = 4
     identifier = 5
+    placeholder = 6
 
     def make(self, text: str) -> "Token":
         return Token(self, text)
@@ -70,6 +71,13 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             yield Token(TokenType.identifier, text)
         elif char.isspace():
             continue  # Skip over whitespace
+        elif char == "%":
+            next_char = pi.peek()
+            if next_char is not None and next_char.isalpha():
+                rest = _consume_identifier(pi)
+                yield Token(TokenType.placeholder, "%" + rest)
+            else:
+                yield Token(TokenType.punctuation, "%")
         elif char in starting_char_to_continuations:
             continuations = starting_char_to_continuations[char]
             if not pi.has_next():
@@ -90,18 +98,20 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                         f"unexpected {c} following {char} (expected one of {continuations})"
                     )
         elif char.isnumeric():
-            # TODO floats, hex?
+            # TODO floats, hex, other kinds of numbers?
             pi.wind_back()
             yield Token(TokenType.number, _consume_integer(pi))
         elif char in QUOTATIONS:
-            yield Token(TokenType.string, _consume_until(pi, char))
+            yield Token(TokenType.string, char + _consume_until(pi, char))
+        elif char == "{":
+            yield Token(TokenType.placeholder, "{" + _consume_until(pi, "}"))
         else:
-            # TODO placeholders ({x}, %s)
+            # TODO comments
             raise TokenizeError(f"unexpected character {char}")
 
 
 def _consume_until(pi: PeekingIterator[str], end: str) -> str:
-    chars = [end]
+    chars = []
     for c in pi:
         chars.append(c)
         # TODO backslash escapes?
