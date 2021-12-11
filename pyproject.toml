@@ -12,3 +12,9 @@ dynamic = ["version", "description"]
 
 [project.urls]
 Home = "https://github.com/JelleZijlstra/sqltree"
+
+[tool.black]
+target_version = ['py36']
+include = '\.pyi?$'
+skip-magic-trailing-comma = true
+experimental-string-processing = true

@@ -90,7 +90,8 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                     text = char
                 else:
                     raise TokenizeError(
-                        f"unexpected EOF following {char} (expected one of {continuations})"
+                        f"unexpected EOF following {char} (expected one of"
+                        f" {continuations})"
                     )
             else:
                 c = pi.next()
@@ -101,7 +102,8 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                     text = char
                 else:
                     raise TokenizeError(
-                        f"unexpected {c} following {char} (expected one of {continuations})"
+                        f"unexpected {c} following {char} (expected one of"
+                        f" {continuations})"
                     )
         elif char.isnumeric():
             # TODO floats, hex, other kinds of numbers?

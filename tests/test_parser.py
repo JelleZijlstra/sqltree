@@ -52,9 +52,7 @@ def test() -> None:
                 ),
                 p.Keyword(T, "AND"),
                 p.BinOp(
-                    p.Identifier(T, "y"),
-                    p.Punctuation(T, "="),
-                    p.StringLiteral(T, "x"),
+                    p.Identifier(T, "y"), p.Punctuation(T, "="), p.StringLiteral(T, "x")
                 ),
             ),
             p.Keyword(T, "AND"),
