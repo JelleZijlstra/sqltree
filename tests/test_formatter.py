@@ -7,3 +7,4 @@ def test() -> None:
         format("# comment\nSELECT * from x where -- comment\n x=3")
         == "# comment\nSELECT *\nFROM x\nWHERE -- comment\nx = 3\n"
     )
+    assert format("SELECT x not -- hello\nLIKE y") == "SELECT x NOT LIKE -- hello\ny\n"

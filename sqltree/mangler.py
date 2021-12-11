@@ -52,4 +52,9 @@ def _is_keyword(token: Token, keyword: str) -> bool:
 
 def _merge_tokens(left: Token, right: Token) -> Token:
     loc = Location(left.loc.sql, left.loc.start_index, right.loc.end_index)
-    return Token(TokenType.keyword, f"{left.text} {right.text}", loc)
+    return Token(
+        TokenType.keyword,
+        f"{left.text} {right.text}",
+        loc,
+        [*left.comments, *right.comments],
+    )
