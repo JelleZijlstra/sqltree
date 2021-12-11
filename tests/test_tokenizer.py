@@ -1,6 +1,6 @@
 from typing import Sequence
-from sqlparse.dialect import Dialect
-from sqlparse.tokenizer import tokenize, Token, TokenType
+from sqltree.dialect import Dialect
+from sqltree.tokenizer import tokenize, Token, TokenType
 
 
 def check(sql: str, tokens: Sequence[Token]) -> None:
@@ -12,17 +12,17 @@ def test_tokenize() -> None:
     check(
         "SELECT * FROM table WHERE x = 3 AND y = 'x'",
         [
-            TokenType.keyword.make("SELECT"),
+            TokenType.identifier.make("SELECT"),
             TokenType.punctuation.make("*"),
-            TokenType.keyword.make("FROM"),
-            TokenType.keyword.make("table"),
-            TokenType.keyword.make("WHERE"),
-            TokenType.keyword.make("x"),
+            TokenType.identifier.make("FROM"),
+            TokenType.identifier.make("table"),
+            TokenType.identifier.make("WHERE"),
+            TokenType.identifier.make("x"),
             TokenType.punctuation.make("="),
             TokenType.number.make("3"),
-            TokenType.keyword.make("AND"),
-            TokenType.keyword.make("y"),
+            TokenType.identifier.make("AND"),
+            TokenType.identifier.make("y"),
             TokenType.punctuation.make("="),
-            TokenType.string.make("'x'"),
+            TokenType.identifier.make("'x'"),
         ],
     )

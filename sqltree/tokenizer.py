@@ -15,6 +15,7 @@ class TokenType(enum.Enum):
     punctuation = 2
     string = 3
     number = 4
+    identifier = 5
 
     def make(self, text: str) -> "Token":
         return Token(self, text)
@@ -66,7 +67,7 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
         if char.isalpha():
             pi.wind_back()
             text = _consume_identifier(pi)
-            yield Token(TokenType.keyword, text)
+            yield Token(TokenType.identifier, text)
         elif char.isspace():
             continue  # Skip over whitespace
         elif char in starting_char_to_continuations:
@@ -89,16 +90,21 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                         f"unexpected {c} following {char} (expected one of {continuations})"
                     )
         elif char.isnumeric():
+            # TODO floats, hex?
             pi.wind_back()
             yield Token(TokenType.number, _consume_integer(pi))
         elif char in QUOTATIONS:
             yield Token(TokenType.string, _consume_until(pi, char))
+        else:
+            # TODO placeholders ({x}, %s)
+            raise TokenizeError(f"unexpected character {char}")
 
 
 def _consume_until(pi: PeekingIterator[str], end: str) -> str:
     chars = [end]
     for c in pi:
         chars.append(c)
+        # TODO backslash escapes?
         if c == end:
             return "".join(chars)
     raise TokenizeError(f"unexpected EOF (expected {end})")
