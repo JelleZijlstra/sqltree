@@ -14,3 +14,12 @@ can already parse some queries:
 $ python -m sqltree "SELECT * FROM x WHERE x = 3"
 Select(select_exprs=[SelectExpr(expr=Star(), alias=None)], table=Identifier(text='x'), conditions=BinOp(left=Identifier(text='x'), op=Punctuation(text='='), right=IntegerLiteral(value=3)))
 ```
+
+And format them:
+
+```
+$  python -m sqltree.formatter "SELECT * from x where x=3"
+SELECT *
+FROM x
+WHERE x = 3
+```
