@@ -11,6 +11,11 @@ from .visitor import Visitor
 class Formatter(Visitor[None]):
     pieces: List[str] = field(default_factory=list)
 
+    def add_space(self) -> None:
+        if self.pieces and self.pieces[-1].endswith("\n"):
+            return
+        self.pieces.append(" ")
+
     def visit(self, node: p.Node) -> None:
         if isinstance(node, p.Statement):
             for comment in node.leading_comments:
@@ -18,26 +23,26 @@ class Formatter(Visitor[None]):
         super().visit(node)
         if isinstance(node, p.Leaf):
             if node.token.comments:
-                self.pieces.append(" ")
+                self.add_space()
             for comment in node.token.comments:
                 self.pieces.append(comment.text)
 
     def visit_Select(self, node: p.Select) -> None:
         self.visit(node.select_kw)
-        self.pieces.append(" ")
+        self.add_space()
         for i, expr in enumerate(node.select_exprs):
             if i > 0:
-                self.pieces.append(" ")
+                self.add_space()
             self.visit(expr)
         self.pieces.append("\n")
         if node.from_kw is not None and node.table is not None:
             self.visit(node.from_kw)
-            self.pieces.append(" ")
+            self.add_space()
             self.visit(node.table)
             self.pieces.append("\n")
         if node.where_kw is not None and node.conditions is not None:
             self.visit(node.where_kw)
-            self.pieces.append(" ")
+            self.add_space()
             self.visit(node.conditions)
             self.pieces.append("\n")
 
@@ -69,16 +74,16 @@ class Formatter(Visitor[None]):
 
     def visit_BinOp(self, node: p.BinOp) -> None:
         self.visit(node.left)
-        self.pieces.append(" ")
+        self.add_space()
         self.visit(node.op)
-        self.pieces.append(" ")
+        self.add_space()
         self.visit(node.right)
 
     def visit_SelectExpr(self, node: p.SelectExpr) -> None:
         self.visit(node.expr)
         if node.as_kw is not None and node.alias is not None:
             self.visit(node.as_kw)
-            self.pieces.append(" ")
+            self.add_space()
             self.visit(node.alias)
         if node.trailing_comma is not None:
             self.visit(node.trailing_comma)
