@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Iterable, Optional, Sequence, Tuple, Union
 
 from sqltree.peeking_iterator import PeekingIterator
@@ -104,8 +104,13 @@ class SelectExpr(Node):
 
 
 @dataclass
+class Comment(Leaf):
+    text: str
+
+
+@dataclass
 class Statement(Node):
-    pass
+    leading_comments: Sequence[Comment] = field(repr=False)
 
 
 @dataclass
@@ -120,6 +125,10 @@ class Select(Statement):
 
 def parse(tokens: Iterable[Token]) -> Statement:
     pi = PeekingIterator(list(tokens))
+    return _parse_statement(pi)
+
+
+def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
     first = pi.peek()
     if first is None:
         raise ValueError("SQL is empty")
@@ -132,6 +141,12 @@ def parse(tokens: Iterable[Token]) -> Statement:
         if remaining is not None:
             raise ParseError.from_unexpected_token(remaining, "EOF")
         return statement
+    elif first.typ is TokenType.comment:
+        pi.next()
+        comment = Comment(first, first.text)
+        statement = _parse_statement(pi)
+        leading_comments = (comment, *statement.leading_comments)
+        return replace(statement, leading_comments=leading_comments)
     else:
         raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
@@ -154,7 +169,7 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
         where_kw = _expect_keyword(pi, "WHERE")
         conditions = _parse_expression(pi)
 
-    return Select(select, select_exprs, from_kw, table, where_kw, conditions)
+    return Select((), select, select_exprs, from_kw, table, where_kw, conditions)
 
 
 def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
@@ -196,8 +211,12 @@ _BINOP_PRECEDENCE = [
         P("<>"),
         P("!="),
         K("IS"),
+        K("IS NOT"),
+        K("NOT LIKE"),
         K("LIKE"),
+        K("NOT REGEXP"),
         K("REGEXP"),
+        K("NOT IN"),
         K("IN"),
     ),
     # TODO: BETWEEN, CASE, WHEN, THEN, ELSE

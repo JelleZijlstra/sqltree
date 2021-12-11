@@ -1,7 +1,7 @@
 import enum
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Iterable, Set
+from typing import Dict, Iterable, Sequence, Set
 
 from .dialect import Dialect
 from .location import Location
@@ -19,6 +19,7 @@ class TokenType(enum.Enum):
     number = 4
     identifier = 5
     placeholder = 6
+    comment = 7
 
     def make(self, text: str, loc: Location) -> "Token":
         return Token(self, text, loc)
@@ -29,6 +30,7 @@ class Token:
     typ: TokenType
     text: str
     loc: Location
+    comments: Sequence["Token"] = ()
 
 
 PUNCTUATION = {
@@ -50,6 +52,12 @@ PUNCTUATION = {
     "&",
     "^",
     "|",
+    ">>",
+    "<<",
+    "&&",
+    "||",
+    "--",  # Not a punctuation but a comment
+    "/*",  # Also a comment
 }
 QUOTATIONS = {"`", "'", '"'}
 
@@ -98,6 +106,24 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                 c = pi.next()
                 if c in continuations:
                     text = char + c
+                    if text == "--":
+                        token_type = TokenType.comment
+                        text += _consume_until(pi, "\n", eof_okay=True)
+                    elif text == "/*":
+                        token_type = TokenType.comment
+                        chars = []
+                        seen_star = False
+                        for c in pi:
+                            chars.append(c)
+                            if seen_star and c == "/":
+                                text += "".join(chars)
+                                break
+                            if c == "*":
+                                seen_star = True
+                            else:
+                                seen_star = False
+                        else:
+                            raise TokenizeError("unexpected EOF (expected '*/')")
                 elif "" in c:
                     pi.wind_back()
                     text = char
@@ -117,6 +143,9 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
         elif char == "{":
             token_type = TokenType.placeholder
             text = "{" + _consume_until(pi, "}")
+        elif char == "#":
+            token_type = TokenType.comment
+            text = "#" + _consume_until(pi, "\n", eof_okay=True)
         else:
             # TODO comments. Maybe we leave those out of the AST in the parser, then reattach
             # them later at the nearest node we find. Or we just attach them to the token and make
@@ -125,14 +154,16 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
         yield Token(token_type, text, Location(sql, start_index, pi.next_pos - 1))
 
 
-def _consume_until(pi: PeekingIterator[str], end: str) -> str:
+def _consume_until(pi: PeekingIterator[str], end: str, eof_okay: bool = False) -> str:
     chars = []
     for c in pi:
         chars.append(c)
         # TODO backslash escapes?
         if c == end:
             return "".join(chars)
-    raise TokenizeError(f"unexpected EOF (expected {end})")
+    if eof_okay:
+        return "".join(chars)
+    raise TokenizeError(f"unexpected EOF (expected {end!r})")
 
 
 def _consume_identifier(pi: PeekingIterator[str]) -> str:

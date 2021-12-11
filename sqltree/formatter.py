@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from typing import List
 
 from . import parser as p
-from .visitor import Visitor
 from .sqltree import sqltree
+from .visitor import Visitor
 
 
 @dataclass
