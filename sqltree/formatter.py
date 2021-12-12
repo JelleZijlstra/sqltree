@@ -3,11 +3,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Generator, List, Sequence
 
-
 from . import parser as p
 from .sqltree import sqltree
 from .tokenizer import Token
-from .visitor import Visitor, Transformer
+from .visitor import Transformer, Visitor
 
 
 @dataclass

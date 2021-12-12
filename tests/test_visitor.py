@@ -1,6 +1,6 @@
+from sqltree.formatter import transform_and_format
 from sqltree.parser import BinOp, Punctuation
 from sqltree.visitor import Transformer
-from sqltree.formatter import transform_and_format
 
 
 class FlipConditions(Transformer):

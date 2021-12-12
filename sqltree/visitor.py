@@ -1,5 +1,5 @@
 import collections.abc
-from dataclasses import asdict, fields
+from dataclasses import fields
 from typing import Generic, TypeVar
 
 from .parser import Node
