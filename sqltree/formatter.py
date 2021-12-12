@@ -7,7 +7,7 @@ from typing import Generator, List, Sequence
 from . import parser as p
 from .sqltree import sqltree
 from .tokenizer import Token
-from .visitor import Visitor
+from .visitor import Visitor, Transformer
 
 
 @dataclass
@@ -149,11 +149,20 @@ class Formatter(Visitor[None]):
             self.visit(node.trailing_comma)
 
 
-def format(sql: str) -> str:
-    tree = sqltree(sql)
+def format_tree(tree: p.Node) -> str:
     fmt = Formatter()
     fmt.visit(tree)
     return "".join(fmt.pieces)
+
+
+def format(sql: str) -> str:
+    return format_tree(sqltree(sql))
+
+
+def transform_and_format(sql: str, transformer: Transformer) -> str:
+    tree = sqltree(sql)
+    new_tree = transformer.visit(tree)
+    return format_tree(new_tree)
 
 
 if __name__ == "__main__":
