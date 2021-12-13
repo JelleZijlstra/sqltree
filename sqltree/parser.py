@@ -153,6 +153,13 @@ class OrderByClause(Node):
 
 
 @dataclass
+class LimitClause(Node):
+    # TODO placeholders, offsets
+    kw: Keyword = field(compare=False, repr=False)
+    row_count: IntegerLiteral
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
@@ -167,6 +174,15 @@ class Select(Statement):
     having: Optional[HavingClause] = None
     order_by: Optional[OrderByClause] = None
     # TODO LIMIT
+
+
+@dataclass
+class Delete(Statement):
+    delete_kw: Keyword = field(compare=False, repr=False)
+    from_clause: FromClause
+    where: Optional[WhereClause] = None
+    order_by: Optional[OrderByClause] = None
+    limit: Optional[LimitClause] = None
 
 
 @dataclass
@@ -186,13 +202,6 @@ class Assignment(Node):
 class SetClause(Node):
     kw: Keyword = field(compare=False, repr=False)
     assignments: Sequence[Assignment]
-
-
-@dataclass
-class LimitClause(Node):
-    # TODO placeholders, offsets
-    kw: Keyword = field(compare=False, repr=False)
-    row_count: IntegerLiteral
 
 
 @dataclass
@@ -219,6 +228,8 @@ def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
             statement = _parse_select(pi)
         elif first.text == "UPDATE":
             statement = _parse_update(pi)
+        elif first.text == "DELETE":
+            statement = _parse_delete(pi)
         else:
             raise ParseError(f"Unexpected {first.text!r}", first.loc)
         remaining = pi.peek()
@@ -308,6 +319,18 @@ def _parse_update(pi: PeekingIterator[Token]) -> Update:
     return Update(
         (), kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
+
+
+def _parse_delete(pi: PeekingIterator[Token]) -> Delete:
+    delete = _expect_keyword(pi, "DELETE")
+    from_clause = _parse_from_clause(pi)
+    if from_clause is None:
+        token = _next_or_else(pi, "FROM")
+        raise ParseError.from_unexpected_token(token, "FROM")
+    where_clause = _parse_where_clause(pi)
+    order_by_clause = _parse_order_by_clause(pi)
+    limit_clause = _parse_limit_clause(pi)
+    return Delete((), delete, from_clause, where_clause, order_by_clause, limit_clause)
 
 
 def _parse_select(pi: PeekingIterator[Token]) -> Select:

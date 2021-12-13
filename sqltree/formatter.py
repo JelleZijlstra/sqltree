@@ -129,6 +129,14 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.having)
         self.maybe_visit(node.order_by)
 
+    def visit_Delete(self, node: p.Delete) -> None:
+        self.visit(node.delete_kw)
+        self.add_space()
+        self.visit(node.from_clause)
+        self.maybe_visit(node.where)
+        self.maybe_visit(node.order_by)
+        self.maybe_visit(node.limit)
+
     def visit_Update(self, node: p.Update) -> None:
         self.visit(node.update_kw)
         self.add_space()

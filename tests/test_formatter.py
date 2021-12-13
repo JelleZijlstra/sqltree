@@ -24,3 +24,10 @@ def test_update() -> None:
         format("update x set y = default, z =3 where x=4 order   by z limit 1")
         == "UPDATE x\nSET y = DEFAULT, z = 3\nWHERE x = 4\nORDER BY z\nLIMIT 1\n"
     )
+
+
+def test_delete() -> None:
+    assert (
+        format("delete from x where y = 3 order by z desc limit 1")
+        == "DELETE FROM x\nWHERE y = 3\nORDER BY z DESC\nLIMIT 1\n"
+    )
