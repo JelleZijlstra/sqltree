@@ -32,7 +32,7 @@ class ParseError(Exception):
         return ParseError(f"Unexpected {token.text!r} (expected {expected})", token.loc)
 
     def __str__(self) -> str:
-        return f"{self.message}\n{self.location.display()}"
+        return f"{self.message}\n{self.location.display().rstrip()}"
 
 
 @dataclass
