@@ -1,10 +1,9 @@
 from dataclasses import dataclass, field, replace
 from typing import Iterable, Optional, Sequence, Tuple, Union
+
 from .keywords import MYSQL_KEYWORDS
-
-from .peeking_iterator import PeekingIterator
-
 from .location import Location
+from .peeking_iterator import PeekingIterator
 from .tokenizer import Token, TokenType
 
 

@@ -1,7 +1,7 @@
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Generator, List, Sequence, Optional
+from typing import Generator, List, Optional, Sequence
 
 from . import parser as p
 from .sqltree import sqltree
