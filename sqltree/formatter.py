@@ -203,9 +203,18 @@ class Formatter(Visitor[None]):
     def visit_Insert(self, node: p.Insert) -> None:
         self.visit(node.insert_kw)
         self.add_space()
+        if node.ignore_kw is not None:
+            self.visit(node.ignore_kw)
+            self.add_space()
         self.visit(node.into)
         self.visit(node.values)
         self.maybe_visit(node.odku)
+
+    def visit_Replace(self, node: p.Replace) -> None:
+        self.visit(node.replace_kw)
+        self.add_space()
+        self.visit(node.into)
+        self.visit(node.values)
 
     def visit_Keyword(self, node: p.Keyword) -> None:
         self.pieces.append(node.text.upper())

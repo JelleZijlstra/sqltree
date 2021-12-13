@@ -271,6 +271,13 @@ class Insert(Statement):
     odku: Optional[OdkuClause] = None
 
 
+@dataclass
+class Replace(Statement):
+    replace_kw: Keyword = field(compare=False, repr=False)
+    into: IntoClause
+    values: ValuesClause
+
+
 def parse(tokens: Iterable[Token]) -> Statement:
     pi = PeekingIterator(list(tokens))
     return _parse_statement(pi)
@@ -493,11 +500,19 @@ def _parse_insert(pi: PeekingIterator[Token]) -> Insert:
     return Insert((), insert, ignore, into, values, odku)
 
 
+def _parse_replace(pi: PeekingIterator[Token]) -> Replace:
+    insert = _expect_keyword(pi, "REPLACE")
+    into = _parse_into_clause(pi)
+    values = _parse_values_clause(pi)
+    return Replace((), insert, into, values)
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
     "DELETE": _parse_delete,
     "INSERT": _parse_insert,
+    "REPLACE": _parse_replace,
 }
 
 

@@ -40,3 +40,11 @@ def test_insert() -> None:
         == "INSERT INTO x(a, b, c)\nVALUES (1, 2, 3), (4, 5, 6)\nON DUPLICATE KEY"
         " UPDATE a = 4\n"
     )
+    assert (
+        format("insert ignore into x(a) values(1)")
+        == "INSERT IGNORE INTO x(a)\nVALUES (1)\n"
+    )
+
+
+def test_replace() -> None:
+    assert format("replace into x(a) values(1)") == "REPLACE INTO x(a)\nVALUES (1)\n"
