@@ -18,3 +18,6 @@ target_version = ['py36']
 include = '\.pyi?$'
 skip-magic-trailing-comma = true
 experimental-string-processing = true
+
+[project.requires-extra]
+fixit = ["fixit"]
