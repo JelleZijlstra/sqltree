@@ -1,7 +1,7 @@
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Generator, List, Sequence
+from typing import Generator, List, Sequence, Optional
 
 from . import parser as p
 from .sqltree import sqltree
@@ -27,6 +27,11 @@ class Formatter(Visitor[None]):
     def add_comments_from_leaf(self, node: p.Leaf) -> None:
         if not self.should_skip_comments:
             self.add_comments(node.token.comments)
+
+    def visit_trailing_comma(self, node: Optional[p.Punctuation]) -> None:
+        if node is not None:
+            self.visit(node)
+            self.add_space()
 
     @contextmanager
     def skip_comments(self) -> Generator[None, None, None]:
@@ -76,27 +81,21 @@ class Formatter(Visitor[None]):
     def visit_GroupByClause(self, node: p.GroupByClause) -> None:
         self.visit(node.kwseq)
         self.add_space()
-        for i, expr in enumerate(node.expr):
-            if i > 0:
-                self.add_space()
+        for expr in node.expr:
             self.visit(expr)
         self.pieces.append("\n")
 
     def visit_OrderByClause(self, node: p.OrderByClause) -> None:
         self.visit(node.kwseq)
         self.add_space()
-        for i, expr in enumerate(node.expr):
-            if i > 0:
-                self.add_space()
+        for expr in node.expr:
             self.visit(expr)
         self.pieces.append("\n")
 
     def visit_SetClause(self, node: p.SetClause) -> None:
         self.visit(node.kw)
         self.add_space()
-        for i, assignment in enumerate(node.assignments):
-            if i > 0:
-                self.add_space()
+        for assignment in node.assignments:
             self.visit(assignment)
         self.pieces.append("\n")
 
@@ -112,9 +111,7 @@ class Formatter(Visitor[None]):
                 self.visit(node.open_paren)
             else:
                 self.pieces.append("(")
-            for i, col_name in enumerate(node.col_names):
-                if i > 0:
-                    self.add_space()
+            for col_name in node.col_names:
                 self.visit(col_name)
             if node.close_paren is not None:
                 self.visit(node.close_paren)
@@ -124,7 +121,7 @@ class Formatter(Visitor[None]):
 
     def visit_ColName(self, node: p.ColName) -> None:
         self.visit(node.col_name)
-        self.maybe_visit(node.trailing_comma)
+        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_ValuesClause(self, node: p.ValuesClause) -> None:
         if node.kw.text == "VALUES":
@@ -133,31 +130,25 @@ class Formatter(Visitor[None]):
             self.pieces.append("VALUES")
             self.add_comments_from_leaf(node.kw)
         self.add_space()
-        for i, value_list in enumerate(node.value_lists):
-            if i > 0:
-                self.add_space()
+        for value_list in node.value_lists:
             self.visit(value_list)
         self.pieces.append("\n")
 
     def visit_ValueList(self, node: p.ValueList) -> None:
         self.visit(node.open_paren)
-        for i, value in enumerate(node.values):
-            if i > 0:
-                self.add_space()
+        for value in node.values:
             self.visit(value)
         self.visit(node.close_paren)
-        self.maybe_visit(node.trailing_comma)
+        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_ValueWithComma(self, node: p.ValueWithComma) -> None:
         self.visit(node.value)
-        self.maybe_visit(node.trailing_comma)
+        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_OdkuClause(self, node: p.OdkuClause) -> None:
         self.visit(node.kwseq)
         self.add_space()
-        for i, assignment in enumerate(node.assignments):
-            if i > 0:
-                self.add_space()
+        for assignment in node.assignments:
             self.visit(assignment)
         self.pieces.append("\n")
 
@@ -167,8 +158,7 @@ class Formatter(Visitor[None]):
         self.visit(node.eq_punc)
         self.add_space()
         self.visit(node.value)
-        if node.trailing_comma:
-            self.visit(node.trailing_comma)
+        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_Default(self, node: p.Default) -> None:
         self.visit(node.kw)
@@ -182,9 +172,7 @@ class Formatter(Visitor[None]):
     def visit_Select(self, node: p.Select) -> None:
         self.visit(node.select_kw)
         self.add_space()
-        for i, expr in enumerate(node.select_exprs):
-            if i > 0:
-                self.add_space()
+        for expr in node.select_exprs:
             self.visit(expr)
         self.pieces.append("\n")
 
@@ -259,16 +247,14 @@ class Formatter(Visitor[None]):
             self.visit(node.as_kw)
             self.add_space()
             self.visit(node.alias)
-        if node.trailing_comma is not None:
-            self.visit(node.trailing_comma)
+        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_OrderByExpr(self, node: p.OrderByExpr) -> None:
         self.visit(node.expr)
         if node.direction_kw is not None:
             self.add_space()
             self.visit(node.direction_kw)
-        if node.trailing_comma is not None:
-            self.visit(node.trailing_comma)
+        self.visit_trailing_comma(node.trailing_comma)
 
 
 def format_tree(tree: p.Node) -> str:
