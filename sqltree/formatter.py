@@ -51,6 +51,69 @@ class Formatter(Visitor[None]):
         for kw in node.keywords:
             self.add_comments(kw.token.comments)
 
+    def visit_FromClause(self, node: p.FromClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.table)
+        self.pieces.append("\n")
+
+    def visit_WhereClause(self, node: p.WhereClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.conditions)
+        self.pieces.append("\n")
+
+    def visit_HavingClause(self, node: p.HavingClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.conditions)
+        self.pieces.append("\n")
+
+    def visit_GroupByClause(self, node: p.GroupByClause) -> None:
+        self.visit(node.kwseq)
+        self.add_space()
+        for i, expr in enumerate(node.expr):
+            if i > 0:
+                self.add_space()
+            self.visit(expr)
+        self.pieces.append("\n")
+
+    def visit_OrderByClause(self, node: p.OrderByClause) -> None:
+        self.visit(node.kwseq)
+        self.add_space()
+        for i, expr in enumerate(node.expr):
+            if i > 0:
+                self.add_space()
+            self.visit(expr)
+        self.pieces.append("\n")
+
+    def visit_SetClause(self, node: p.SetClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        for i, assignment in enumerate(node.assignments):
+            if i > 0:
+                self.add_space()
+            self.visit(assignment)
+        self.pieces.append("\n")
+
+    def visit_Assignment(self, node: p.Assignment) -> None:
+        self.visit(node.col_name)
+        self.add_space()
+        self.visit(node.eq_punc)
+        self.add_space()
+        self.visit(node.value)
+        if node.trailing_comma:
+            self.visit(node.trailing_comma)
+
+    def visit_Default(self, node: p.Default) -> None:
+        self.visit(node.kw)
+
+    def visit_LimitClause(self, node: p.LimitClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.row_count)
+        self.pieces.append("\n")
+
     def visit_Select(self, node: p.Select) -> None:
         self.visit(node.select_kw)
         self.add_space()
@@ -60,41 +123,21 @@ class Formatter(Visitor[None]):
             self.visit(expr)
         self.pieces.append("\n")
 
-        if node.from_kw is not None and node.table is not None:
-            self.visit(node.from_kw)
-            self.add_space()
-            self.visit(node.table)
-            self.pieces.append("\n")
+        self.maybe_visit(node.from_clause)
+        self.maybe_visit(node.where)
+        self.maybe_visit(node.group_by)
+        self.maybe_visit(node.having)
+        self.maybe_visit(node.order_by)
 
-        if node.where_kw is not None and node.conditions is not None:
-            self.visit(node.where_kw)
-            self.add_space()
-            self.visit(node.conditions)
-            self.pieces.append("\n")
-
-        if node.group_by_kwseq is not None:
-            self.visit(node.group_by_kwseq)
-            self.add_space()
-            for i, expr in enumerate(node.group_by):
-                if i > 0:
-                    self.add_space()
-                self.visit(expr)
-            self.pieces.append("\n")
-
-        if node.having_kw is not None and node.having_conditions is not None:
-            self.visit(node.having_kw)
-            self.add_space()
-            self.visit(node.having_conditions)
-            self.pieces.append("\n")
-
-        if node.order_by_kwseq is not None:
-            self.visit(node.order_by_kwseq)
-            self.add_space()
-            for i, expr in enumerate(node.order_by):
-                if i > 0:
-                    self.add_space()
-                self.visit(expr)
-            self.pieces.append("\n")
+    def visit_Update(self, node: p.Update) -> None:
+        self.visit(node.update_kw)
+        self.add_space()
+        self.visit(node.table)
+        self.pieces.append("\n")
+        self.visit(node.set_clause)
+        self.maybe_visit(node.where)
+        self.maybe_visit(node.order_by)
+        self.maybe_visit(node.limit)
 
     def visit_Keyword(self, node: p.Keyword) -> None:
         self.pieces.append(node.text)

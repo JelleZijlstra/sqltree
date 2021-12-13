@@ -1,7 +1,7 @@
 from sqltree.formatter import format
 
 
-def test() -> None:
+def test_select() -> None:
     assert format("SELECT * from x") == "SELECT *\nFROM x\n"
     assert (
         format("# comment\nSELECT * from x where -- comment\n x=3")
@@ -16,4 +16,11 @@ def test() -> None:
         == "SELECT x AS z\nFROM y\nGROUP BY -- hello\nx ASC, y DESC\nHAVING x ="
         " {x}\nORDER"
         " BY x DESC\n"
+    )
+
+
+def test_update() -> None:
+    assert (
+        format("update x set y = default, z =3 where x=4 order   by z limit 1")
+        == "UPDATE x\nSET y = DEFAULT, z = 3\nWHERE x = 4\nORDER BY z\nLIMIT 1\n"
     )

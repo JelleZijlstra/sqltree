@@ -1,6 +1,6 @@
 import collections.abc
 from dataclasses import fields
-from typing import Generic, TypeVar
+from typing import Generic, Optional, TypeVar
 
 from .parser import Node
 
@@ -12,6 +12,11 @@ class Visitor(Generic[T]):
         method_name = f"visit_{type(node).__name__}"
         method = getattr(self, method_name, self.generic_visit)
         return method(node)  # type: ignore
+
+    def maybe_visit(self, node: Optional[Node]) -> Optional[T]:
+        if node is None:
+            return None
+        return self.visit(node)
 
     def generic_visit(self, node: Node) -> T:
         raise NotImplementedError(node)

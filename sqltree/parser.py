@@ -123,6 +123,36 @@ class Comment(Leaf):
 
 
 @dataclass
+class FromClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    table: Expression
+
+
+@dataclass
+class WhereClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    conditions: Expression
+
+
+@dataclass
+class GroupByClause(Node):
+    kwseq: KeywordSequence = field(compare=False, repr=False)
+    expr: Sequence[OrderByExpr]
+
+
+@dataclass
+class HavingClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    conditions: Expression
+
+
+@dataclass
+class OrderByClause(Node):
+    kwseq: KeywordSequence = field(compare=False, repr=False)
+    expr: Sequence[OrderByExpr]
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
@@ -131,21 +161,48 @@ class Statement(Node):
 class Select(Statement):
     select_kw: Keyword = field(compare=False, repr=False)
     select_exprs: Sequence[SelectExpr]
-    from_kw: Optional[Keyword] = field(compare=False, repr=False, default=None)
-    table: Optional[Expression] = None
-    where_kw: Optional[Keyword] = field(compare=False, repr=False, default=None)
-    conditions: Optional[Expression] = None
-    group_by_kwseq: Optional[KeywordSequence] = field(
-        compare=False, repr=False, default=None
-    )
-    group_by: Sequence[OrderByExpr] = ()
-    having_kw: Optional[Keyword] = field(compare=False, repr=False, default=None)
-    having_conditions: Optional[Expression] = None
-    order_by_kwseq: Optional[KeywordSequence] = field(
-        compare=False, repr=False, default=None
-    )
-    order_by: Sequence[OrderByExpr] = ()
+    from_clause: Optional[FromClause] = None
+    where: Optional[WhereClause] = None
+    group_by: Optional[GroupByClause] = None
+    having: Optional[HavingClause] = None
+    order_by: Optional[OrderByClause] = None
     # TODO LIMIT
+
+
+@dataclass
+class Default(Node):
+    kw: Keyword = field(compare=False, repr=False)
+
+
+@dataclass
+class Assignment(Node):
+    col_name: Identifier
+    eq_punc: Punctuation
+    value: Union[Expression, Default]
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class SetClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    assignments: Sequence[Assignment]
+
+
+@dataclass
+class LimitClause(Node):
+    # TODO placeholders, offsets
+    kw: Keyword = field(compare=False, repr=False)
+    row_count: IntegerLiteral
+
+
+@dataclass
+class Update(Statement):
+    update_kw: Keyword = field(compare=False, repr=False)
+    table: Expression
+    set_clause: SetClause
+    where: Optional[WhereClause] = None
+    order_by: Optional[OrderByClause] = None
+    limit: Optional[LimitClause] = None
 
 
 def parse(tokens: Iterable[Token]) -> Statement:
@@ -160,6 +217,8 @@ def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
     elif first.typ is TokenType.keyword:
         if first.text == "SELECT":
             statement = _parse_select(pi)
+        elif first.text == "UPDATE":
+            statement = _parse_update(pi)
         else:
             raise ParseError(f"Unexpected {first.text!r}", first.loc)
         remaining = pi.peek()
@@ -176,9 +235,83 @@ def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
         raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
 
+def _parse_from_clause(pi: PeekingIterator[Token]) -> Optional[FromClause]:
+    if _next_is_keyword(pi, "FROM"):
+        from_kw = _expect_keyword(pi, "FROM")
+        table = _parse_expression(pi)
+        return FromClause(from_kw, table)
+    return None
+
+
+def _parse_where_clause(pi: PeekingIterator[Token]) -> Optional[WhereClause]:
+    if _next_is_keyword(pi, "WHERE"):
+        kw = _expect_keyword(pi, "WHERE")
+        table = _parse_expression(pi)
+        return WhereClause(kw, table)
+    return None
+
+
+def _parse_having_clause(pi: PeekingIterator[Token]) -> Optional[HavingClause]:
+    if _next_is_keyword(pi, "HAVING"):
+        kw = _expect_keyword(pi, "HAVING")
+        table = _parse_expression(pi)
+        return HavingClause(kw, table)
+    return None
+
+
+def _parse_group_by_clause(pi: PeekingIterator[Token]) -> Optional[GroupByClause]:
+    kwseq = _maybe_consume_keyword_sequence(pi, ["GROUP", "BY"])
+    if kwseq is not None:
+        exprs = _parse_order_by_list(pi)
+        return GroupByClause(kwseq, exprs)
+    else:
+        return None
+
+
+def _parse_order_by_clause(pi: PeekingIterator[Token]) -> Optional[OrderByClause]:
+    kwseq = _maybe_consume_keyword_sequence(pi, ["ORDER", "BY"])
+    if kwseq is not None:
+        exprs = _parse_order_by_list(pi)
+        return OrderByClause(kwseq, exprs)
+    else:
+        return None
+
+
+def _parse_set_clause(pi: PeekingIterator[Token]) -> SetClause:
+    kw = _expect_keyword(pi, "SET")
+    assignments = []
+    while True:
+        expr = _parse_assignment(pi)
+        assignments.append(expr)
+        if expr.trailing_comma is None:
+            break
+    return SetClause(kw, assignments)
+
+
+def _parse_limit_clause(pi: PeekingIterator[Token]) -> Optional[LimitClause]:
+    if _next_is_keyword(pi, "LIMIT"):
+        kw = _expect_keyword(pi, "LIMIT")
+        token = _next_or_else(pi, "number")
+        if token.typ is not TokenType.number:
+            raise ParseError.from_unexpected_token(token, "number")
+        return LimitClause(kw, IntegerLiteral(token, int(token.text)))
+    return None
+
+
+def _parse_update(pi: PeekingIterator[Token]) -> Update:
+    kw = _expect_keyword(pi, "UPDATE")
+    table = _parse_expression(pi)
+    set_clause = _parse_set_clause(pi)
+    where_clause = _parse_where_clause(pi)
+    order_by_clause = _parse_order_by_clause(pi)
+    limit_clause = _parse_limit_clause(pi)
+    return Update(
+        (), kw, table, set_clause, where_clause, order_by_clause, limit_clause
+    )
+
+
 def _parse_select(pi: PeekingIterator[Token]) -> Select:
     select = _expect_keyword(pi, "SELECT")
-    from_kw = table = where_kw = conditions = having_kw = having_conditions = None
     select_exprs = []
     while True:
         expr = _parse_select_expr(pi)
@@ -186,45 +319,29 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
         if expr.trailing_comma is None:
             break
 
-    if _next_is_keyword(pi, "FROM"):
-        from_kw = _expect_keyword(pi, "FROM")
-        table = _parse_expression(pi)
-
-    if _next_is_keyword(pi, "WHERE"):
-        where_kw = _expect_keyword(pi, "WHERE")
-        conditions = _parse_expression(pi)
-
-    group_by_kwseq = _maybe_consume_keyword_sequence(pi, ["GROUP", "BY"])
-    if group_by_kwseq is not None:
-        group_by = _parse_order_by_list(pi)
-    else:
-        group_by = ()
-
-    if _next_is_keyword(pi, "HAVING"):
-        having_kw = _expect_keyword(pi, "HAVING")
-        having_conditions = _parse_expression(pi)
-
-    order_by_kwseq = _maybe_consume_keyword_sequence(pi, ["ORDER", "BY"])
-    if order_by_kwseq is not None:
-        order_by = _parse_order_by_list(pi)
-    else:
-        order_by = ()
+    from_clause = _parse_from_clause(pi)
+    where_clause = _parse_where_clause(pi)
+    group_by_clause = _parse_group_by_clause(pi)
+    having_clause = _parse_having_clause(pi)
+    order_by_clause = _parse_order_by_clause(pi)
 
     return Select(
         (),
         select,
         select_exprs,
-        from_kw=from_kw,
-        table=table,
-        where_kw=where_kw,
-        conditions=conditions,
-        group_by_kwseq=group_by_kwseq,
-        group_by=group_by,
-        having_kw=having_kw,
-        having_conditions=having_conditions,
-        order_by_kwseq=order_by_kwseq,
-        order_by=order_by,
+        from_clause,
+        where_clause,
+        group_by_clause,
+        having_clause,
+        order_by_clause,
     )
+
+
+def _parse_identifier(pi: PeekingIterator[Token]) -> Identifier:
+    token = _next_or_else(pi, "identifier")
+    if token.typ is not TokenType.identifier:
+        raise ParseError.from_unexpected_token(token, "identifier")
+    return Identifier(token, token.text)
 
 
 def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
@@ -232,13 +349,25 @@ def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
     as_kw = alias = trailing_comma = None
     if _next_is_keyword(pi, "AS"):
         as_kw = _expect_keyword(pi, "AS")
-        token = _next_or_else(pi, "identifier")
-        if token.typ is not TokenType.identifier:
-            raise ParseError.from_unexpected_token(token, "identifier")
-        alias = Identifier(token, token.text)
+        alias = _parse_identifier(pi)
     if _next_is_punctuation(pi, ","):
         trailing_comma = _expect_punctuation(pi, ",")
     return SelectExpr(expr, as_kw, alias, trailing_comma)
+
+
+def _parse_assignment(pi: PeekingIterator[Token]) -> Assignment:
+    colname = _parse_identifier(pi)
+    punc = _expect_punctuation(pi, "=")
+    if _next_is_keyword(pi, "DEFAULT"):
+        kw = _expect_keyword(pi, "DEFAULT")
+        value = Default(kw)
+    else:
+        value = _parse_expression(pi)
+    if _next_is_punctuation(pi, ","):
+        trailing_comma = _expect_punctuation(pi, ",")
+    else:
+        trailing_comma = None
+    return Assignment(colname, punc, value, trailing_comma)
 
 
 def _parse_order_by_list(pi: PeekingIterator[Token]) -> Sequence[OrderByExpr]:
