@@ -17,6 +17,7 @@ def test_select() -> None:
         " {x}\nORDER"
         " BY x DESC\n"
     )
+    assert format("select x from y order by z") == "SELECT x\nFROM y\nORDER BY z\n"
 
 
 def test_update() -> None:
@@ -30,4 +31,12 @@ def test_delete() -> None:
     assert (
         format("delete from x where y = 3 order by z desc limit 1")
         == "DELETE FROM x\nWHERE y = 3\nORDER BY z DESC\nLIMIT 1\n"
+    )
+
+
+def test_insert() -> None:
+    assert (
+        format("insert x (a, b, c) value(1, 2,3), (4,5,6) on duplicate key update a=4")
+        == "INSERT INTO x(a, b, c)\nVALUES (1, 2, 3), (4, 5, 6)\nON DUPLICATE KEY"
+        " UPDATE a = 4\n"
     )

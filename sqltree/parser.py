@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field, replace
 from typing import Iterable, Optional, Sequence, Tuple, Union
+from .keywords import MYSQL_KEYWORDS
 
-from sqltree.peeking_iterator import PeekingIterator
+from .peeking_iterator import PeekingIterator
 
 from .location import Location
 from .tokenizer import Token, TokenType
@@ -25,10 +26,14 @@ class ParseError(Exception):
 
     def __post_init__(self) -> None:
         super().__init__(self.message)
+        self.location.display()
 
     @classmethod
     def from_unexpected_token(cls, token: Token, expected: str) -> "ParseError":
         return ParseError(f"Unexpected {token.text!r} (expected {expected})", token.loc)
+
+    def __str__(self) -> str:
+        return f"{self.message}\n{self.location.display()}"
 
 
 @dataclass
@@ -190,11 +195,14 @@ class Default(Node):
     kw: Keyword = field(compare=False, repr=False)
 
 
+Value = Union[Expression, Default]
+
+
 @dataclass
 class Assignment(Node):
     col_name: Identifier
     eq_punc: Punctuation
-    value: Union[Expression, Default]
+    value: Value
     trailing_comma: Optional[Punctuation] = None
 
 
@@ -214,6 +222,56 @@ class Update(Statement):
     limit: Optional[LimitClause] = None
 
 
+@dataclass
+class ColName(Node):
+    col_name: Identifier
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class IntoClause(Node):
+    kw: Optional[Keyword] = field(compare=False, repr=False)
+    table: Expression
+    open_paren: Optional[Punctuation]
+    col_names: Sequence[ColName]
+    close_paren: Optional[Punctuation]
+
+
+@dataclass
+class ValueWithComma(Node):
+    value: Value
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class ValueList(Node):
+    open_paren: Punctuation
+    values: Sequence[ValueWithComma]
+    close_paren: Punctuation
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class ValuesClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    value_lists: Sequence[ValueList]
+
+
+@dataclass
+class OdkuClause(Node):
+    kwseq: KeywordSequence
+    assignments: Sequence[Assignment]
+
+
+@dataclass
+class Insert(Statement):
+    insert_kw: Keyword = field(compare=False, repr=False)
+    ignore_kw: Optional[Keyword]
+    into: IntoClause
+    values: ValuesClause
+    odku: Optional[OdkuClause] = None
+
+
 def parse(tokens: Iterable[Token]) -> Statement:
     pi = PeekingIterator(list(tokens))
     return _parse_statement(pi)
@@ -224,14 +282,12 @@ def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
     if first is None:
         raise ValueError("SQL is empty")
     elif first.typ is TokenType.keyword:
-        if first.text == "SELECT":
-            statement = _parse_select(pi)
-        elif first.text == "UPDATE":
-            statement = _parse_update(pi)
-        elif first.text == "DELETE":
-            statement = _parse_delete(pi)
-        else:
+        try:
+            parser = _VERB_TO_PARSER[first.text]
+        except KeyError:
             raise ParseError(f"Unexpected {first.text!r}", first.loc)
+        else:
+            statement = parser(pi)
         remaining = pi.peek()
         if remaining is not None:
             raise ParseError.from_unexpected_token(remaining, "EOF")
@@ -288,14 +344,19 @@ def _parse_order_by_clause(pi: PeekingIterator[Token]) -> Optional[OrderByClause
         return None
 
 
-def _parse_set_clause(pi: PeekingIterator[Token]) -> SetClause:
-    kw = _expect_keyword(pi, "SET")
+def _parse_assignment_list(pi: PeekingIterator[Token]) -> Sequence[Assignment]:
     assignments = []
     while True:
         expr = _parse_assignment(pi)
         assignments.append(expr)
         if expr.trailing_comma is None:
             break
+    return assignments
+
+
+def _parse_set_clause(pi: PeekingIterator[Token]) -> SetClause:
+    kw = _expect_keyword(pi, "SET")
+    assignments = _parse_assignment_list(pi)
     return SetClause(kw, assignments)
 
 
@@ -360,6 +421,87 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
     )
 
 
+def _parse_col_name(pi: PeekingIterator[Token]) -> ColName:
+    name = _parse_identifier(pi)
+    comma = _maybe_consume_punctuation(pi, ",")
+    return ColName(name, comma)
+
+
+def _parse_into_clause(pi: PeekingIterator[Token]) -> IntoClause:
+    into = _maybe_consume_keyword(pi, "INTO")  # INTO is optional, at least in MYSQL
+    table = _parse_expression(pi)
+    if _next_is_punctuation(pi, "("):
+        open_paren = _expect_punctuation(pi, "(")
+        col_names = []
+        while True:
+            col_name = _parse_col_name(pi)
+            col_names.append(col_name)
+            if col_name.trailing_comma is None:
+                break
+        close_paren = _expect_punctuation(pi, ")")
+    else:
+        col_names = ()
+        open_paren = close_paren = None
+    return IntoClause(into, table, open_paren, col_names, close_paren)
+
+
+def _parse_value_with_comma(pi: PeekingIterator[Token]) -> ValueWithComma:
+    val = _parse_value(pi)
+    comma = _maybe_consume_punctuation(pi, ",")
+    return ValueWithComma(val, comma)
+
+
+def _parse_value_list(pi: PeekingIterator[Token]) -> ValueList:
+    open_paren = _expect_punctuation(pi, "(")
+    values = []
+    while True:
+        value = _parse_value_with_comma(pi)
+        values.append(value)
+        if value.trailing_comma is None:
+            break
+    close_paren = _expect_punctuation(pi, ")")
+    comma = _maybe_consume_punctuation(pi, ",")
+    return ValueList(open_paren, values, close_paren, comma)
+
+
+def _parse_values_clause(pi: PeekingIterator[Token]) -> ValuesClause:
+    kw = _maybe_consume_soft_keyword(pi, "VALUE")
+    if kw is None:
+        kw = _expect_keyword(pi, "VALUES")
+    value_lists = []
+    while True:
+        value_list = _parse_value_list(pi)
+        value_lists.append(value_list)
+        if value_list.trailing_comma is None:
+            break
+    return ValuesClause(kw, value_lists)
+
+
+def _parse_odku_clause(pi: PeekingIterator[Token]) -> Optional[OdkuClause]:
+    odku = _maybe_consume_keyword_sequence(pi, ["ON", "DUPLICATE", "KEY", "UPDATE"])
+    if odku is None:
+        return None
+    assignments = _parse_assignment_list(pi)
+    return OdkuClause(odku, assignments)
+
+
+def _parse_insert(pi: PeekingIterator[Token]) -> Insert:
+    insert = _expect_keyword(pi, "INSERT")
+    ignore = _maybe_consume_keyword(pi, "IGNORE")
+    into = _parse_into_clause(pi)
+    values = _parse_values_clause(pi)
+    odku = _parse_odku_clause(pi)
+    return Insert((), insert, ignore, into, values, odku)
+
+
+_VERB_TO_PARSER = {
+    "SELECT": _parse_select,
+    "UPDATE": _parse_update,
+    "DELETE": _parse_delete,
+    "INSERT": _parse_insert,
+}
+
+
 def _parse_identifier(pi: PeekingIterator[Token]) -> Identifier:
     token = _next_or_else(pi, "identifier")
     if token.typ is not TokenType.identifier:
@@ -378,14 +520,18 @@ def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
     return SelectExpr(expr, as_kw, alias, trailing_comma)
 
 
+def _parse_value(pi: PeekingIterator[Token]) -> Value:
+    if _next_is_keyword(pi, "DEFAULT"):
+        kw = _expect_keyword(pi, "DEFAULT")
+        return Default(kw)
+    else:
+        return _parse_expression(pi)
+
+
 def _parse_assignment(pi: PeekingIterator[Token]) -> Assignment:
     colname = _parse_identifier(pi)
     punc = _expect_punctuation(pi, "=")
-    if _next_is_keyword(pi, "DEFAULT"):
-        kw = _expect_keyword(pi, "DEFAULT")
-        value = Default(kw)
-    else:
-        value = _parse_expression(pi)
+    value = _parse_value(pi)
     if _next_is_punctuation(pi, ","):
         trailing_comma = _expect_punctuation(pi, ",")
     else:
@@ -410,10 +556,7 @@ def _parse_order_by_expr(pi: PeekingIterator[Token]) -> OrderByExpr:
         direction = _expect_keyword(pi, "DESC")
     else:
         direction = None
-    if _next_is_punctuation(pi, ","):
-        trailing_comma = _expect_punctuation(pi, ",")
-    else:
-        trailing_comma = None
+    trailing_comma = _maybe_consume_punctuation(pi, ",")
     return OrderByExpr(expr, direction, trailing_comma)
 
 
@@ -518,6 +661,18 @@ def _next_is_punctuation(pi: PeekingIterator[Token], punctuation: str) -> bool:
     )
 
 
+def _maybe_consume_punctuation(
+    pi: PeekingIterator[Token], punctuation: str
+) -> Optional[Punctuation]:
+    for token in pi:
+        if token.typ is TokenType.punctuation and token.text == punctuation:
+            return Punctuation(token, token.text)
+        else:
+            pi.wind_back()
+            break
+    return None
+
+
 def _expect_punctuation(pi: PeekingIterator[Token], punctuation: str) -> Punctuation:
     token = _next_or_else(pi, punctuation)
     if token.typ is not TokenType.punctuation or token.text != punctuation:
@@ -529,11 +684,17 @@ def _maybe_consume_keyword_sequence(
     pi: PeekingIterator[Token], keywords: Sequence[str]
 ) -> Optional[KeywordSequence]:
     keywords_found = []
+    consumed = 0
     for token in pi:
-        if (
-            token.typ is TokenType.keyword
-            and token.text == keywords[len(keywords_found)]
-        ):
+        consumed += 1
+        expected = keywords[len(keywords_found)]
+        if expected in MYSQL_KEYWORDS:
+            condition = token.typ is TokenType.keyword and token.text == expected
+        else:
+            condition = (
+                token.typ is TokenType.identifier and token.text.upper() == expected
+            )
+        if condition:
             keywords_found.append(token)
             if len(keywords_found) == len(keywords):
                 return KeywordSequence(
@@ -542,7 +703,7 @@ def _maybe_consume_keyword_sequence(
         else:
             break
 
-    for _ in keywords_found:
+    for _ in range(consumed):
         pi.wind_back()
     return None
 
@@ -559,6 +720,30 @@ def _expect_keyword(pi: PeekingIterator[Token], keyword: str) -> Keyword:
     if token.typ is not TokenType.keyword or token.text != keyword:
         raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
+
+
+def _maybe_consume_keyword(
+    pi: PeekingIterator[Token], keyword: str
+) -> Optional[Keyword]:
+    for token in pi:
+        if token.typ is TokenType.keyword and token.text == keyword:
+            return Keyword(token, token.text)
+        else:
+            pi.wind_back()
+            break
+    return None
+
+
+def _maybe_consume_soft_keyword(
+    pi: PeekingIterator[Token], keyword: str
+) -> Optional[Keyword]:
+    for token in pi:
+        if token.typ is TokenType.identifier and token.text.upper() == keyword:
+            return Keyword(token, token.text)
+        else:
+            pi.wind_back()
+            break
+    return None
 
 
 def _next_or_else(pi: PeekingIterator[Token], label: str) -> Token:

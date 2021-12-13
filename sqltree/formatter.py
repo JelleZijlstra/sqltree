@@ -24,6 +24,10 @@ class Formatter(Visitor[None]):
         for comment in comments:
             self.pieces.append(comment.text)
 
+    def add_comments_from_leaf(self, node: p.Leaf) -> None:
+        if not self.should_skip_comments:
+            self.add_comments(node.token.comments)
+
     @contextmanager
     def skip_comments(self) -> Generator[None, None, None]:
         old_value = self.should_skip_comments
@@ -38,8 +42,8 @@ class Formatter(Visitor[None]):
             for comment in node.leading_comments:
                 self.pieces.append(comment.text)
         super().visit(node)
-        if not self.should_skip_comments and isinstance(node, p.Leaf):
-            self.add_comments(node.token.comments)
+        if isinstance(node, p.Leaf):
+            self.add_comments_from_leaf(node)
 
     def visit_KeywordSequence(self, node: p.KeywordSequence) -> None:
         # Move all the comments to the end
@@ -89,6 +93,67 @@ class Formatter(Visitor[None]):
 
     def visit_SetClause(self, node: p.SetClause) -> None:
         self.visit(node.kw)
+        self.add_space()
+        for i, assignment in enumerate(node.assignments):
+            if i > 0:
+                self.add_space()
+            self.visit(assignment)
+        self.pieces.append("\n")
+
+    def visit_IntoClause(self, node: p.IntoClause) -> None:
+        if node.kw is not None:
+            self.visit(node.kw)
+        else:
+            self.pieces.append("INTO")
+        self.add_space()
+        self.visit(node.table)
+        if node.col_names:
+            if node.open_paren is not None:
+                self.visit(node.open_paren)
+            else:
+                self.pieces.append("(")
+            for i, col_name in enumerate(node.col_names):
+                if i > 0:
+                    self.add_space()
+                self.visit(col_name)
+            if node.close_paren is not None:
+                self.visit(node.close_paren)
+            else:
+                self.pieces.append(")")
+        self.pieces.append("\n")
+
+    def visit_ColName(self, node: p.ColName) -> None:
+        self.visit(node.col_name)
+        self.maybe_visit(node.trailing_comma)
+
+    def visit_ValuesClause(self, node: p.ValuesClause) -> None:
+        if node.kw.text == "VALUES":
+            self.visit(node.kw)
+        else:
+            self.pieces.append("VALUES")
+            self.add_comments_from_leaf(node.kw)
+        self.add_space()
+        for i, value_list in enumerate(node.value_lists):
+            if i > 0:
+                self.add_space()
+            self.visit(value_list)
+        self.pieces.append("\n")
+
+    def visit_ValueList(self, node: p.ValueList) -> None:
+        self.visit(node.open_paren)
+        for i, value in enumerate(node.values):
+            if i > 0:
+                self.add_space()
+            self.visit(value)
+        self.visit(node.close_paren)
+        self.maybe_visit(node.trailing_comma)
+
+    def visit_ValueWithComma(self, node: p.ValueWithComma) -> None:
+        self.visit(node.value)
+        self.maybe_visit(node.trailing_comma)
+
+    def visit_OdkuClause(self, node: p.OdkuClause) -> None:
+        self.visit(node.kwseq)
         self.add_space()
         for i, assignment in enumerate(node.assignments):
             if i > 0:
@@ -147,8 +212,15 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
 
+    def visit_Insert(self, node: p.Insert) -> None:
+        self.visit(node.insert_kw)
+        self.add_space()
+        self.visit(node.into)
+        self.visit(node.values)
+        self.maybe_visit(node.odku)
+
     def visit_Keyword(self, node: p.Keyword) -> None:
-        self.pieces.append(node.text)
+        self.pieces.append(node.text.upper())
 
     def visit_Punctuation(self, node: p.Punctuation) -> None:
         self.pieces.append(node.text)
