@@ -20,6 +20,7 @@ class Feature(enum.Enum):
         5  # INSERT ... SELECT requires parentheses around the SELECT
     )
     replace = 6  # REPLACE statement
+    with_clause = 7  # leading WITH clause in DELETE, UPDATE, SELECT
 
 
 @dataclass
@@ -84,6 +85,11 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
     Feature.default_values_on_insert: {Vendor.mysql: False, Vendor.redshift: True},
     Feature.insert_select_require_parens: {Vendor.mysql: False, Vendor.redshift: True},
     Feature.replace: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.with_clause: {
+        Vendor.mysql: False,
+        Vendor.presto: True,
+        Vendor.redshift: True,
+    },
 }
 _missing_features = set(Feature) - set(_FEATURES)
 assert not _missing_features, f"missing settings for {_missing_features}"
