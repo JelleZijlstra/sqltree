@@ -178,6 +178,9 @@ class Formatter(Visitor[None]):
     def visit_Default(self, node: p.Default) -> None:
         self.visit(node.kw)
 
+    def visit_All(self, node: p.All) -> None:
+        self.visit(node.kw)
+
     def visit_LimitClause(self, node: p.LimitClause) -> None:
         self.visit(node.kw)
         self.add_space()

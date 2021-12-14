@@ -176,6 +176,11 @@ class LimitClause(Node):
 
 
 @dataclass
+class All(Node):
+    kw: Keyword = field(compare=False, repr=False)
+
+
+@dataclass
 class SelectLimitClause(Node):
     """A LIMIT clause on a SELECT statement, which supports more features.
 
@@ -190,7 +195,7 @@ class SelectLimitClause(Node):
     """
 
     kw: Keyword = field(compare=False, repr=False)
-    row_count: Expression
+    row_count: Union[Expression, All]
     offset: Optional[Expression] = None
     offset_leaf: Union[Punctuation, Keyword, None] = None
 
@@ -486,9 +491,23 @@ def _parse_limit_clause(p: Parser, *, allowed: bool = True) -> Optional[LimitCla
 def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
     kw = _maybe_consume_keyword(p, "LIMIT")
     if kw is not None:
-        expr = _parse_simple_expression(p)
+        all_kw = _maybe_consume_keyword(p, "ALL")
+        if all_kw is not None:
+            if not p.dialect.supports_feature(Feature.limit_all):
+                raise ParseError.from_disallowed(all_kw.token, p.dialect, "LIMIT ALL")
+            expr = All(all_kw)
+        else:
+            expr = _parse_simple_expression(p)
         if _next_is_punctuation(p, ","):
             offset_leaf = _expect_punctuation(p, ",")
+            if not p.dialect.supports_feature(Feature.comma_offset):
+                raise ParseError.from_disallowed(
+                    offset_leaf.token, p.dialect, "LIMIT offset, row_count"
+                )
+            if isinstance(expr, All):
+                raise ParseError.from_disallowed(
+                    offset_leaf.token, p.dialect, "ALL combined with offset"
+                )
             offset = expr
             expr = _parse_simple_expression(p)
         else:

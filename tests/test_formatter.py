@@ -22,10 +22,10 @@ def test_select() -> None:
     )
     assert format("select x from y order by z") == "SELECT x\nFROM y\nORDER BY z\n"
     assert format("select x from y limit 1") == "SELECT x\nFROM y\nLIMIT 1\n"
-    assert (
-        format("select x from y limit 1, -- hi\n2")
-        == "SELECT x\nFROM y\nLIMIT 2 OFFSET -- hi\n1\n"
-    )
+    offset_comma = "select x from y limit 1, -- hi\n2"
+    assert format(offset_comma) == "SELECT x\nFROM y\nLIMIT 2 OFFSET -- hi\n1\n"
+    with pytest.raises(ParseError):
+        format(offset_comma, Dialect(Vendor.redshift))
     assert (
         format("select x from y limit 1 offset 2")
         == "SELECT x\nFROM y\nLIMIT 1 OFFSET 2\n"
@@ -34,6 +34,13 @@ def test_select() -> None:
         format("with x as (select x from y) select y from x", Dialect(Vendor.redshift))
         == "WITH x AS (SELECT x\nFROM y\n)\nSELECT y\nFROM x\n"
     )
+    select_limit_all = "select y from x limit all"
+    assert (
+        format(select_limit_all, Dialect(Vendor.redshift))
+        == "SELECT y\nFROM x\nLIMIT ALL\n"
+    )
+    with pytest.raises(ParseError):
+        format(select_limit_all)
 
 
 def test_update() -> None:
