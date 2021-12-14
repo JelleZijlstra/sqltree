@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 import enum
-from typing import Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple, Union
 
 Version = Optional[Tuple[int, ...]]
 
@@ -9,6 +9,16 @@ class Vendor(enum.Enum):
     mysql = 1
     presto = 2
     redshift = 3
+
+
+class Feature(enum.Enum):
+    require_into_for_ignore = 1  # allow omitting INTO in INSERT INTO
+    support_value_for_insert = 2  # support using VALUE instead of VALUES in INSERT
+    insert_ignore = 3  # INSERT IGNORE
+    default_values_on_insert = 4  # INSERT ... DEFAULT VALUES
+    insert_select_require_parens = (
+        5  # INSERT ... SELECT requires parentheses around the SELECT
+    )
 
 
 @dataclass
@@ -24,6 +34,15 @@ class Dialect:
         keywords = _compute_keywords(self.vendor, self.version)
         self._keywords = keywords
         return keywords
+
+    def supports_feature(self, feature: Feature) -> bool:
+        value = _FEATURES[feature].get(self.vendor, True)
+        if isinstance(value, bool):
+            return value
+        start_version, end_version = value
+        return version_is_in(
+            self.version, start_version=start_version, end_version=end_version
+        )
 
 
 DEFAULT_DIALECT = Dialect(Vendor.mysql)
@@ -48,6 +67,16 @@ def version_is_in(
     if end_version is not None and version >= end_version:
         return False
     return True
+
+
+# Values can be either a boolean (indicating support across all versions) or a version range
+_FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
+    Feature.require_into_for_ignore: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.support_value_for_insert: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.insert_ignore: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.default_values_on_insert: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.insert_select_require_parens: {Vendor.mysql: False, Vendor.redshift: True},
+}
 
 
 # from https://dev.mysql.com/doc/refman/5.7/en/keywords.html#keywords-in-current-series
