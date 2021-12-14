@@ -190,12 +190,29 @@ class SelectLimitClause(Node):
 
 
 @dataclass
+class CommonTableExpression(Node):
+    table_name: Identifier
+    col_names: Optional["ColNameList"]
+    as_kw: Keyword = field(compare=False, repr=False)
+    subquery: "Subselect"
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class WithClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    recursive_kw: Optional[Keyword]
+    ctes: Sequence[CommonTableExpression]
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
 
 @dataclass
 class Select(Statement):
+    with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
     select_exprs: Sequence[SelectExpr]
     from_clause: Optional[FromClause] = None
@@ -208,6 +225,7 @@ class Select(Statement):
 
 @dataclass
 class Delete(Statement):
+    with_clause: Optional[WithClause]
     delete_kw: Keyword = field(compare=False, repr=False)
     from_clause: FromClause
     where: Optional[WhereClause] = None
@@ -239,6 +257,7 @@ class SetClause(Node):
 
 @dataclass
 class Update(Statement):
+    with_clause: Optional[WithClause]
     update_kw: Keyword = field(compare=False, repr=False)
     table: Expression
     set_clause: SetClause
@@ -254,12 +273,17 @@ class ColName(Node):
 
 
 @dataclass
+class ColNameList(Node):
+    open_paren: Punctuation
+    col_names: Sequence[ColName]
+    close_paren: Punctuation
+
+
+@dataclass
 class IntoClause(Node):
     kw: Optional[Keyword] = field(compare=False, repr=False)
     table: Expression
-    open_paren: Optional[Punctuation]
-    col_names: Sequence[ColName]
-    close_paren: Optional[Punctuation]
+    col_names: Optional[ColNameList]
 
 
 @dataclass
@@ -453,7 +477,7 @@ def _parse_update(p: Parser) -> Update:
     order_by_clause = _parse_order_by_clause(p)
     limit_clause = _parse_limit_clause(p)
     return Update(
-        (), kw, table, set_clause, where_clause, order_by_clause, limit_clause
+        (), None, kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
 
 
@@ -466,7 +490,9 @@ def _parse_delete(p: Parser) -> Delete:
     where_clause = _parse_where_clause(p)
     order_by_clause = _parse_order_by_clause(p)
     limit_clause = _parse_limit_clause(p)
-    return Delete((), delete, from_clause, where_clause, order_by_clause, limit_clause)
+    return Delete(
+        (), None, delete, from_clause, where_clause, order_by_clause, limit_clause
+    )
 
 
 def _parse_select(p: Parser) -> Select:
@@ -487,6 +513,7 @@ def _parse_select(p: Parser) -> Select:
 
     return Select(
         (),
+        None,
         select,
         select_exprs,
         from_clause,
@@ -504,12 +531,7 @@ def _parse_col_name(p: Parser) -> ColName:
     return ColName(name, comma)
 
 
-def _parse_into_clause(p: Parser) -> IntoClause:
-    if p.dialect.supports_feature(Feature.require_into_for_ignore):
-        into = _expect_keyword(p, "INTO")
-    else:
-        into = _maybe_consume_keyword(p, "INTO")
-    table = _parse_expression(p)
+def _maybe_parse_col_name_list(p: Parser) -> Optional[ColNameList]:
     if _next_is_punctuation(p, "("):
         open_paren = _expect_punctuation(p, "(")
         col_names = []
@@ -519,10 +541,19 @@ def _parse_into_clause(p: Parser) -> IntoClause:
             if col_name.trailing_comma is None:
                 break
         close_paren = _expect_punctuation(p, ")")
+        return ColNameList(open_paren, col_names, close_paren)
     else:
-        col_names = ()
-        open_paren = close_paren = None
-    return IntoClause(into, table, open_paren, col_names, close_paren)
+        return None
+
+
+def _parse_into_clause(p: Parser) -> IntoClause:
+    if p.dialect.supports_feature(Feature.require_into_for_ignore):
+        into = _expect_keyword(p, "INTO")
+    else:
+        into = _maybe_consume_keyword(p, "INTO")
+    table = _parse_expression(p)
+    col_names = _maybe_parse_col_name_list(p)
+    return IntoClause(into, table, col_names)
 
 
 def _parse_value_with_comma(p: Parser) -> ValueWithComma:
@@ -610,12 +641,46 @@ def _parse_replace(p: Parser) -> Replace:
     return Replace((), insert, into, values)
 
 
+def _parse_cte(p: Parser) -> CommonTableExpression:
+    name = _parse_identifier(p)
+    col_names = _maybe_parse_col_name_list(p)
+    as_kw = _expect_keyword(p, "AS")
+    subquery = _parse_subselect(p, require_parens=True)
+    trailing_comma = _maybe_consume_punctuation(p, ",")
+    return CommonTableExpression(name, col_names, as_kw, subquery, trailing_comma)
+
+
+def _parse_with_clause(p: Parser) -> WithClause:
+    kw = _expect_keyword(p, "WITH")
+    recursive_kw = _maybe_consume_keyword(p, "RECURSIVE")
+    ctes = []
+    while True:
+        expr = _parse_cte(p)
+        ctes.append(expr)
+        if expr.trailing_comma is None:
+            break
+
+    return WithClause(kw, recursive_kw, ctes)
+
+
+def _parse_with(p: Parser) -> Statement:
+    with_clause = _parse_with_clause(p)
+    token = p.pi.peek()
+    statement = _parse_statement(p)
+    if isinstance(statement, (Select, Update, Delete)):
+        return replace(statement, with_clause=with_clause)
+    if token is None:
+        raise EOFError("SELECT, UPDATE, or DELETE")
+    raise ParseError.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
     "DELETE": _parse_delete,
     "INSERT": _parse_insert,
     "REPLACE": _parse_replace,
+    "WITH": _parse_with,
 }
 
 

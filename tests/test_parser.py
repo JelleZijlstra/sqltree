@@ -10,6 +10,7 @@ def test() -> None:
     tree = sqltree("SELECT * FROM a")
     assert tree == p.Select(
         (),
+        None,
         p.Keyword(T, "SELECT"),
         [p.SelectExpr(p.Star(T), None, None, None)],
         p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
@@ -20,6 +21,7 @@ def test() -> None:
     )
     assert tree == p.Select(
         (),
+        None,
         p.Keyword(T, "SELECT"),
         [
             p.SelectExpr(p.Identifier(T, "a"), None, None, p.Punctuation(T, ",")),
@@ -69,6 +71,7 @@ def test() -> None:
     tree = sqltree("-- comment\nSELECT * FROM a")
     assert tree == p.Select(
         (p.Comment(T, "-- comment\n"),),
+        None,
         p.Keyword(T, "SELECT"),
         [p.SelectExpr(p.Star(T), None, None, None)],
         p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
