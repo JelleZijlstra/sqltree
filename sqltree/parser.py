@@ -603,6 +603,8 @@ def _parse_insert(p: Parser) -> Insert:
 
 def _parse_replace(p: Parser) -> Replace:
     insert = _expect_keyword(p, "REPLACE")
+    if not p.dialect.supports_feature(Feature.replace):
+        raise ParseError(f"{p.dialect} does not support REPLACE", insert.token.loc)
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
     return Replace((), insert, into, values)

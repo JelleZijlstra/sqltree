@@ -19,6 +19,7 @@ class Feature(enum.Enum):
     insert_select_require_parens = (
         5  # INSERT ... SELECT requires parentheses around the SELECT
     )
+    replace = 6  # REPLACE statement
 
 
 @dataclass
@@ -27,6 +28,12 @@ class Dialect:
     # If omitted, we assume the most recent version
     version: Version = None
     _keywords: Optional[Set[str]] = None
+
+    def __str__(self) -> str:
+        name = self.vendor.name
+        if self.version is not None:
+            name += " " + ".".join(map(str, self.version))
+        return name
 
     def get_keywords(self) -> Set[str]:
         if self._keywords is not None:
@@ -76,7 +83,10 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
     Feature.insert_ignore: {Vendor.mysql: True, Vendor.redshift: False},
     Feature.default_values_on_insert: {Vendor.mysql: False, Vendor.redshift: True},
     Feature.insert_select_require_parens: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.replace: {Vendor.mysql: True, Vendor.redshift: False},
 }
+_missing_features = set(Feature) - set(_FEATURES)
+assert not _missing_features, f"missing settings for {_missing_features}"
 
 
 # from https://dev.mysql.com/doc/refman/5.7/en/keywords.html#keywords-in-current-series
