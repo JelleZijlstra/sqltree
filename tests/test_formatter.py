@@ -56,6 +56,13 @@ def test_delete() -> None:
         format("with x as (select x from y) delete from y", Dialect(Vendor.redshift))
         == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\n"
     )
+    assert (
+        format(
+            "with x as (select x from y) delete from y using z, a where x = 4",
+            Dialect(Vendor.redshift),
+        )
+        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\nUSING z, a\nWHERE x = 4\n"
+    )
 
 
 def test_insert() -> None:

@@ -32,6 +32,12 @@ class ParseError(Exception):
     def from_unexpected_token(cls, token: Token, expected: str) -> "ParseError":
         return ParseError(f"Unexpected {token.text!r} (expected {expected})", token.loc)
 
+    @classmethod
+    def from_disallowed(
+        cls, token: Token, dialect: Dialect, feature: str
+    ) -> "ParseError":
+        return ParseError(f"{dialect} does not support {feature}", token.loc)
+
     def __str__(self) -> str:
         return f"{self.message}\n{self.location.display().rstrip()}"
 
@@ -135,7 +141,7 @@ class Comment(Leaf):
 
 @dataclass
 class FromClause(Node):
-    kw: Keyword = field(compare=False, repr=False)
+    kw: Optional[Keyword] = field(compare=False, repr=False)
     table: Expression
 
 
@@ -224,10 +230,23 @@ class Select(Statement):
 
 
 @dataclass
+class TableNameWithComma(Node):
+    table_name: Identifier
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class UsingClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    tables: Sequence[TableNameWithComma]
+
+
+@dataclass
 class Delete(Statement):
     with_clause: Optional[WithClause]
     delete_kw: Keyword = field(compare=False, repr=False)
     from_clause: FromClause
+    using_clause: Optional[UsingClause] = None
     where: Optional[WhereClause] = None
     order_by: Optional[OrderByClause] = None
     limit: Optional[LimitClause] = None
@@ -385,11 +404,14 @@ def _parse_statement(p: Parser) -> Statement:
         raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
 
-def _parse_from_clause(p: Parser) -> Optional[FromClause]:
+def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
     from_kw = _maybe_consume_keyword(p, "FROM")
     if from_kw is not None:
         table = _parse_expression(p)
         return FromClause(from_kw, table)
+    if not require_from:
+        table = _parse_expression(p)
+        return FromClause(None, table)
     return None
 
 
@@ -418,9 +440,15 @@ def _parse_group_by_clause(p: Parser) -> Optional[GroupByClause]:
         return None
 
 
-def _parse_order_by_clause(p: Parser) -> Optional[OrderByClause]:
+def _parse_order_by_clause(
+    p: Parser, *, allowed: bool = True
+) -> Optional[OrderByClause]:
     kwseq = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
     if kwseq is not None:
+        if not allowed:
+            raise ParseError.from_disallowed(
+                kwseq.keywords[0].token, p.dialect, "ORDER BY in this context"
+            )
         exprs = _parse_order_by_list(p)
         return OrderByClause(kwseq, exprs)
     else:
@@ -443,9 +471,13 @@ def _parse_set_clause(p: Parser) -> SetClause:
     return SetClause(kw, assignments)
 
 
-def _parse_limit_clause(p: Parser) -> Optional[LimitClause]:
+def _parse_limit_clause(p: Parser, *, allowed: bool = True) -> Optional[LimitClause]:
     kw = _maybe_consume_keyword(p, "LIMIT")
     if kw is not None:
+        if not allowed:
+            raise ParseError.from_disallowed(
+                kw.token, p.dialect, "LIMIT in this context"
+            )
         expr = _parse_simple_expression(p)
         return LimitClause(kw, expr)
     return None
@@ -481,17 +513,50 @@ def _parse_update(p: Parser) -> Update:
     )
 
 
+def _parse_table_name_with_comma(p: Parser) -> TableNameWithComma:
+    name = _parse_identifier(p)
+    comma = _maybe_consume_punctuation(p, ",")
+    return TableNameWithComma(name, comma)
+
+
+def _parse_using_clause(p: Parser, *, allowed: bool = True) -> Optional[UsingClause]:
+    kw = _maybe_consume_keyword(p, "USING")
+    if kw is None:
+        return None
+    if not allowed:
+        raise ParseError.from_disallowed(kw.token, p.dialect, "USING")
+    tables = []
+    while True:
+        table = _parse_table_name_with_comma(p)
+        tables.append(table)
+        if table.trailing_comma is None:
+            break
+    return UsingClause(kw, tables)
+
+
 def _parse_delete(p: Parser) -> Delete:
     delete = _expect_keyword(p, "DELETE")
-    from_clause = _parse_from_clause(p)
+    from_clause = _parse_from_clause(
+        p, require_from=p.dialect.supports_feature(Feature.require_from_for_delete)
+    )
     if from_clause is None:
         token = _next_or_else(p, "FROM")
         raise ParseError.from_unexpected_token(token, "FROM")
+    allow_using = p.dialect.supports_feature(Feature.delete_using)
+    using_clause = _parse_using_clause(p, allowed=allow_using)
     where_clause = _parse_where_clause(p)
-    order_by_clause = _parse_order_by_clause(p)
-    limit_clause = _parse_limit_clause(p)
+    allow_limit = p.dialect.supports_feature(Feature.update_limit)
+    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
+    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
     return Delete(
-        (), None, delete, from_clause, where_clause, order_by_clause, limit_clause
+        (),
+        None,
+        delete,
+        from_clause,
+        using_clause,
+        where_clause,
+        order_by_clause,
+        limit_clause,
     )
 
 

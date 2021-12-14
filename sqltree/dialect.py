@@ -12,7 +12,7 @@ class Vendor(enum.Enum):
 
 
 class Feature(enum.Enum):
-    require_into_for_ignore = 1  # allow omitting INTO in INSERT INTO
+    require_into_for_ignore = 1  # if False, allow omitting INTO in INSERT INTO
     support_value_for_insert = 2  # support using VALUE instead of VALUES in INSERT
     insert_ignore = 3  # INSERT IGNORE
     default_values_on_insert = 4  # INSERT ... DEFAULT VALUES
@@ -21,6 +21,9 @@ class Feature(enum.Enum):
     )
     replace = 6  # REPLACE statement
     with_clause = 7  # leading WITH clause in DELETE, UPDATE, SELECT
+    require_from_for_delete = 8  # if False, allow omittinng FROM in DELETE FROM
+    update_limit = 9  # ORDER BY and LIMIT on DELETE and UPDATE
+    delete_using = 10  # USING in DELETE
 
 
 @dataclass
@@ -90,6 +93,9 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
         Vendor.presto: True,
         Vendor.redshift: True,
     },
+    Feature.require_from_for_delete: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.update_limit: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.delete_using: {Vendor.mysql: False, Vendor.redshift: True},
 }
 _missing_features = set(Feature) - set(_FEATURES)
 assert not _missing_features, f"missing settings for {_missing_features}"

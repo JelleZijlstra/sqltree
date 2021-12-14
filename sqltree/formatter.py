@@ -63,7 +63,10 @@ class Formatter(Visitor[None]):
             self.add_comments(kw.token.comments)
 
     def visit_FromClause(self, node: p.FromClause) -> None:
-        self.visit(node.kw)
+        if node.kw is None:
+            self.pieces.append("FROM")
+        else:
+            self.visit(node.kw)
         self.add_space()
         self.visit(node.table)
         self.pieces.append("\n")
@@ -215,6 +218,17 @@ class Formatter(Visitor[None]):
             self.visit(cte)
         self.pieces.append("\n")
 
+    def visit_TableNameWithComma(self, node: p.TableNameWithComma) -> None:
+        self.visit(node.table_name)
+        self.visit_trailing_comma(node.trailing_comma)
+
+    def visit_UsingClause(self, node: p.UsingClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        for table in node.tables:
+            self.visit(table)
+        self.pieces.append("\n")
+
     def visit_Select(self, node: p.Select) -> None:
         self.maybe_visit(node.with_clause)
         self.visit(node.select_kw)
@@ -235,6 +249,7 @@ class Formatter(Visitor[None]):
         self.visit(node.delete_kw)
         self.add_space()
         self.visit(node.from_clause)
+        self.maybe_visit(node.using_clause)
         self.maybe_visit(node.where)
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
