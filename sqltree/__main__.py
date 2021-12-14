@@ -1,7 +1,6 @@
 import argparse
 
 from .dialect import DEFAULT_DIALECT, Dialect, Vendor, Version
-
 from .parser import ParseError
 from .sqltree import sqltree
 

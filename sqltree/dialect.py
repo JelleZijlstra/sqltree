@@ -1,6 +1,6 @@
 import enum
-from typing import Dict, Optional, Set, Tuple, Union
 from dataclasses import dataclass
+from typing import Dict, Optional, Set, Tuple, Union
 
 Version = Optional[Tuple[int, ...]]
 
