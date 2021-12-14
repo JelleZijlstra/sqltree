@@ -496,6 +496,10 @@ def _parse_delete(p: Parser) -> Delete:
 
 
 def _parse_select(p: Parser) -> Select:
+    if p.dialect.supports_feature(Feature.with_clause) and _next_is_keyword(p, "WITH"):
+        with_clause = _parse_with_clause(p)
+    else:
+        with_clause = None
     select = _expect_keyword(p, "SELECT")
     select_exprs = []
     while True:
@@ -513,7 +517,7 @@ def _parse_select(p: Parser) -> Select:
 
     return Select(
         (),
-        None,
+        with_clause,
         select,
         select_exprs,
         from_clause,
@@ -865,13 +869,7 @@ def _maybe_consume_keyword_sequence(
     for token in p.pi:
         consumed += 1
         expected = keywords[len(keywords_found)]
-        if expected in p.dialect.get_keywords():
-            condition = token.typ is TokenType.keyword and token.text == expected
-        else:
-            condition = (
-                token.typ is TokenType.identifier and token.text.upper() == expected
-            )
-        if condition:
+        if _token_is_keyword(p, token, expected):
             keywords_found.append(token)
             if len(keywords_found) == len(keywords):
                 return KeywordSequence(
@@ -885,29 +883,31 @@ def _maybe_consume_keyword_sequence(
     return None
 
 
-def _expect_keyword(p: Parser, keyword: str) -> Keyword:
+def _token_is_keyword(p: Parser, token: Optional[Token], keyword: str) -> bool:
+    if token is None:
+        return False
     is_hard = keyword in p.dialect.get_keywords()
-    token = _next_or_else(p, keyword)
     if is_hard:
-        condition = token.typ is TokenType.keyword and token.text == keyword
+        return token.typ is TokenType.keyword and token.text == keyword
     else:
-        condition = token.typ is TokenType.identifier and token.text.upper() == keyword
-    if not condition:
+        return token.typ is TokenType.identifier and token.text.upper() == keyword
+
+
+def _next_is_keyword(p: Parser, keyword: str) -> bool:
+    token = p.pi.peek()
+    return _token_is_keyword(p, token, keyword)
+
+
+def _expect_keyword(p: Parser, keyword: str) -> Keyword:
+    token = _next_or_else(p, keyword)
+    if not _token_is_keyword(p, token, keyword):
         raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
 
 
 def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
-    is_hard = keyword in p.dialect.get_keywords()
     for token in p.pi:
-        if is_hard:
-            condition = token.typ is TokenType.keyword and token.text == keyword
-        else:
-            condition = (
-                token.typ is TokenType.identifier and token.text.upper() == keyword
-            )
-
-        if condition:
+        if _token_is_keyword(p, token, keyword):
             return Keyword(token, token.text)
         else:
             p.pi.wind_back()

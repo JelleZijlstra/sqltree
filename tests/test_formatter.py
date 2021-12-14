@@ -81,6 +81,13 @@ def test_insert() -> None:
         == "INSERT INTO x(a)\n(SELECT x\nFROM y\n)\n"
     )
     assert (
+        format(
+            "insert into x(a) ( with x as (select z from a) select x from y)",
+            Dialect(Vendor.redshift),
+        )
+        == "INSERT INTO x(a)\n(WITH x AS (SELECT z\nFROM a\n)\nSELECT x\nFROM y\n)\n"
+    )
+    assert (
         format("insert into x(a) select x from y")
         == "INSERT INTO x(a)\nSELECT x\nFROM y\n"
     )
