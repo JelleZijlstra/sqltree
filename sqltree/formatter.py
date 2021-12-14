@@ -169,6 +169,19 @@ class Formatter(Visitor[None]):
         self.visit(node.row_count)
         self.pieces.append("\n")
 
+    def visit_SelectLimitClause(self, node: p.SelectLimitClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.row_count)
+        if node.offset is not None:
+            self.add_space()
+            self.pieces.append("OFFSET")
+            if node.offset_leaf is not None:
+                self.add_comments_from_leaf(node.offset_leaf)
+            self.add_space()
+            self.visit(node.offset)
+        self.pieces.append("\n")
+
     def visit_Select(self, node: p.Select) -> None:
         self.visit(node.select_kw)
         self.add_space()
@@ -181,6 +194,7 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.group_by)
         self.maybe_visit(node.having)
         self.maybe_visit(node.order_by)
+        self.maybe_visit(node.limit)
 
     def visit_Delete(self, node: p.Delete) -> None:
         self.visit(node.delete_kw)

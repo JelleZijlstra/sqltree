@@ -158,9 +158,28 @@ class OrderByClause(Node):
 
 @dataclass
 class LimitClause(Node):
-    # TODO placeholders, offsets
     kw: Keyword = field(compare=False, repr=False)
-    row_count: IntegerLiteral
+    row_count: Expression
+
+
+@dataclass
+class SelectLimitClause(Node):
+    """A LIMIT clause on a SELECT statement, which supports more features.
+
+    There are two syntaxes for LIMIT with an offset:
+
+        LIMIT offset, row_count
+        LIMIT row_count OFFSET offset
+
+    We represent these by putting either the OFFSET keyword or trailing comma
+    punctuation in the offset_leaf field.
+
+    """
+
+    kw: Keyword = field(compare=False, repr=False)
+    row_count: Expression
+    offset: Optional[Expression] = None
+    offset_leaf: Union[Punctuation, Keyword, None] = None
 
 
 @dataclass
@@ -177,7 +196,7 @@ class Select(Statement):
     group_by: Optional[GroupByClause] = None
     having: Optional[HavingClause] = None
     order_by: Optional[OrderByClause] = None
-    # TODO LIMIT
+    limit: Optional[SelectLimitClause] = None
 
 
 @dataclass
@@ -369,10 +388,28 @@ def _parse_set_clause(pi: PeekingIterator[Token]) -> SetClause:
 def _parse_limit_clause(pi: PeekingIterator[Token]) -> Optional[LimitClause]:
     if _next_is_keyword(pi, "LIMIT"):
         kw = _expect_keyword(pi, "LIMIT")
-        token = _next_or_else(pi, "number")
-        if token.typ is not TokenType.number:
-            raise ParseError.from_unexpected_token(token, "number")
-        return LimitClause(kw, IntegerLiteral(token, int(token.text)))
+        expr = _parse_simple_expression(pi)
+        return LimitClause(kw, expr)
+    return None
+
+
+def _parse_select_limit_clause(
+    pi: PeekingIterator[Token],
+) -> Optional[SelectLimitClause]:
+    if _next_is_keyword(pi, "LIMIT"):
+        kw = _expect_keyword(pi, "LIMIT")
+        expr = _parse_simple_expression(pi)
+        if _next_is_punctuation(pi, ","):
+            offset_leaf = _expect_punctuation(pi, ",")
+            offset = expr
+            expr = _parse_simple_expression(pi)
+        else:
+            offset_leaf = _maybe_consume_soft_keyword(pi, "OFFSET")
+            if offset_leaf is not None:
+                offset = _parse_simple_expression(pi)
+            else:
+                offset = None
+        return SelectLimitClause(kw, expr, offset, offset_leaf)
     return None
 
 
@@ -414,6 +451,7 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
     group_by_clause = _parse_group_by_clause(pi)
     having_clause = _parse_having_clause(pi)
     order_by_clause = _parse_order_by_clause(pi)
+    select_limit_clause = _parse_select_limit_clause(pi)
 
     return Select(
         (),
@@ -424,6 +462,7 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
         group_by_clause,
         having_clause,
         order_by_clause,
+        select_limit_clause,
     )
 
 

@@ -18,6 +18,15 @@ def test_select() -> None:
         " BY x DESC\n"
     )
     assert format("select x from y order by z") == "SELECT x\nFROM y\nORDER BY z\n"
+    assert format("select x from y limit 1") == "SELECT x\nFROM y\nLIMIT 1\n"
+    assert (
+        format("select x from y limit 1, -- hi\n2")
+        == "SELECT x\nFROM y\nLIMIT 2 OFFSET -- hi\n1\n"
+    )
+    assert (
+        format("select x from y limit 1 offset 2")
+        == "SELECT x\nFROM y\nLIMIT 1 OFFSET 2\n"
+    )
 
 
 def test_update() -> None:
