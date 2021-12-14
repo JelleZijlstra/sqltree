@@ -3,6 +3,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Generator, List, Optional, Sequence
 
+from sqltree.dialect import DEFAULT_DIALECT, Dialect
+
 from . import parser as p
 from .sqltree import sqltree
 from .tokenizer import Token
@@ -286,8 +288,8 @@ def format_tree(tree: p.Node) -> str:
     return "".join(fmt.pieces)
 
 
-def format(sql: str) -> str:
-    return format_tree(sqltree(sql))
+def format(sql: str, dialect: Dialect = DEFAULT_DIALECT) -> str:
+    return format_tree(sqltree(sql, dialect))
 
 
 def transform_and_format(sql: str, transformer: Transformer) -> str:
