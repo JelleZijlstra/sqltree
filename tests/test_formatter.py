@@ -28,6 +28,10 @@ def test_select() -> None:
         format("select x from y limit 1 offset 2")
         == "SELECT x\nFROM y\nLIMIT 1 OFFSET 2\n"
     )
+    assert (
+        format("with x as (select x from y) select y from x", Dialect(Vendor.redshift))
+        == "WITH x AS (SELECT x\nFROM y\n)\nSELECT y\nFROM x\n"
+    )
 
 
 def test_update() -> None:
@@ -35,12 +39,29 @@ def test_update() -> None:
         format("update x set y = default, z =3 where x=4 order   by z limit 1")
         == "UPDATE x\nSET y = DEFAULT, z = 3\nWHERE x = 4\nORDER BY z\nLIMIT 1\n"
     )
+    assert (
+        format(
+            "with x as (select x from y) update y set x = 3", Dialect(Vendor.redshift)
+        )
+        == "WITH x AS (SELECT x\nFROM y\n)\nUPDATE y\nSET x = 3\n"
+    )
 
 
 def test_delete() -> None:
     assert (
         format("delete from x where y = 3 order by z desc limit 1")
         == "DELETE FROM x\nWHERE y = 3\nORDER BY z DESC\nLIMIT 1\n"
+    )
+    assert (
+        format("with x as (select x from y) delete from y", Dialect(Vendor.redshift))
+        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\n"
+    )
+    assert (
+        format(
+            "with x as (select x from y) delete from y using z, a where x = 4",
+            Dialect(Vendor.redshift),
+        )
+        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\nUSING z, a\nWHERE x = 4\n"
     )
 
 
@@ -65,6 +86,13 @@ def test_insert() -> None:
     assert (
         format("insert into x(a) (select x from y)", Dialect(Vendor.redshift))
         == "INSERT INTO x(a)\n(SELECT x\nFROM y\n)\n"
+    )
+    assert (
+        format(
+            "insert into x(a) ( with x as (select z from a) select x from y)",
+            Dialect(Vendor.redshift),
+        )
+        == "INSERT INTO x(a)\n(WITH x AS (SELECT z\nFROM a\n)\nSELECT x\nFROM y\n)\n"
     )
     assert (
         format("insert into x(a) select x from y")

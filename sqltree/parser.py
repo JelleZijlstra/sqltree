@@ -32,6 +32,12 @@ class ParseError(Exception):
     def from_unexpected_token(cls, token: Token, expected: str) -> "ParseError":
         return ParseError(f"Unexpected {token.text!r} (expected {expected})", token.loc)
 
+    @classmethod
+    def from_disallowed(
+        cls, token: Token, dialect: Dialect, feature: str
+    ) -> "ParseError":
+        return ParseError(f"{dialect} does not support {feature}", token.loc)
+
     def __str__(self) -> str:
         return f"{self.message}\n{self.location.display().rstrip()}"
 
@@ -135,7 +141,7 @@ class Comment(Leaf):
 
 @dataclass
 class FromClause(Node):
-    kw: Keyword = field(compare=False, repr=False)
+    kw: Optional[Keyword] = field(compare=False, repr=False)
     table: Expression
 
 
@@ -190,12 +196,29 @@ class SelectLimitClause(Node):
 
 
 @dataclass
+class CommonTableExpression(Node):
+    table_name: Identifier
+    col_names: Optional["ColNameList"]
+    as_kw: Keyword = field(compare=False, repr=False)
+    subquery: "Subselect"
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class WithClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    recursive_kw: Optional[Keyword]
+    ctes: Sequence[CommonTableExpression]
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
 
 @dataclass
 class Select(Statement):
+    with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
     select_exprs: Sequence[SelectExpr]
     from_clause: Optional[FromClause] = None
@@ -207,9 +230,23 @@ class Select(Statement):
 
 
 @dataclass
+class TableNameWithComma(Node):
+    table_name: Identifier
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class UsingClause(Node):
+    kw: Keyword = field(compare=False, repr=False)
+    tables: Sequence[TableNameWithComma]
+
+
+@dataclass
 class Delete(Statement):
+    with_clause: Optional[WithClause]
     delete_kw: Keyword = field(compare=False, repr=False)
     from_clause: FromClause
+    using_clause: Optional[UsingClause] = None
     where: Optional[WhereClause] = None
     order_by: Optional[OrderByClause] = None
     limit: Optional[LimitClause] = None
@@ -239,6 +276,7 @@ class SetClause(Node):
 
 @dataclass
 class Update(Statement):
+    with_clause: Optional[WithClause]
     update_kw: Keyword = field(compare=False, repr=False)
     table: Expression
     set_clause: SetClause
@@ -254,12 +292,17 @@ class ColName(Node):
 
 
 @dataclass
+class ColNameList(Node):
+    open_paren: Punctuation
+    col_names: Sequence[ColName]
+    close_paren: Punctuation
+
+
+@dataclass
 class IntoClause(Node):
     kw: Optional[Keyword] = field(compare=False, repr=False)
     table: Expression
-    open_paren: Optional[Punctuation]
-    col_names: Sequence[ColName]
-    close_paren: Optional[Punctuation]
+    col_names: Optional[ColNameList]
 
 
 @dataclass
@@ -361,11 +404,14 @@ def _parse_statement(p: Parser) -> Statement:
         raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
 
-def _parse_from_clause(p: Parser) -> Optional[FromClause]:
+def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
     from_kw = _maybe_consume_keyword(p, "FROM")
     if from_kw is not None:
         table = _parse_expression(p)
         return FromClause(from_kw, table)
+    if not require_from:
+        table = _parse_expression(p)
+        return FromClause(None, table)
     return None
 
 
@@ -394,9 +440,15 @@ def _parse_group_by_clause(p: Parser) -> Optional[GroupByClause]:
         return None
 
 
-def _parse_order_by_clause(p: Parser) -> Optional[OrderByClause]:
+def _parse_order_by_clause(
+    p: Parser, *, allowed: bool = True
+) -> Optional[OrderByClause]:
     kwseq = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
     if kwseq is not None:
+        if not allowed:
+            raise ParseError.from_disallowed(
+                kwseq.keywords[0].token, p.dialect, "ORDER BY in this context"
+            )
         exprs = _parse_order_by_list(p)
         return OrderByClause(kwseq, exprs)
     else:
@@ -419,9 +471,13 @@ def _parse_set_clause(p: Parser) -> SetClause:
     return SetClause(kw, assignments)
 
 
-def _parse_limit_clause(p: Parser) -> Optional[LimitClause]:
+def _parse_limit_clause(p: Parser, *, allowed: bool = True) -> Optional[LimitClause]:
     kw = _maybe_consume_keyword(p, "LIMIT")
     if kw is not None:
+        if not allowed:
+            raise ParseError.from_disallowed(
+                kw.token, p.dialect, "LIMIT in this context"
+            )
         expr = _parse_simple_expression(p)
         return LimitClause(kw, expr)
     return None
@@ -453,23 +509,62 @@ def _parse_update(p: Parser) -> Update:
     order_by_clause = _parse_order_by_clause(p)
     limit_clause = _parse_limit_clause(p)
     return Update(
-        (), kw, table, set_clause, where_clause, order_by_clause, limit_clause
+        (), None, kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
+
+
+def _parse_table_name_with_comma(p: Parser) -> TableNameWithComma:
+    name = _parse_identifier(p)
+    comma = _maybe_consume_punctuation(p, ",")
+    return TableNameWithComma(name, comma)
+
+
+def _parse_using_clause(p: Parser, *, allowed: bool = True) -> Optional[UsingClause]:
+    kw = _maybe_consume_keyword(p, "USING")
+    if kw is None:
+        return None
+    if not allowed:
+        raise ParseError.from_disallowed(kw.token, p.dialect, "USING")
+    tables = []
+    while True:
+        table = _parse_table_name_with_comma(p)
+        tables.append(table)
+        if table.trailing_comma is None:
+            break
+    return UsingClause(kw, tables)
 
 
 def _parse_delete(p: Parser) -> Delete:
     delete = _expect_keyword(p, "DELETE")
-    from_clause = _parse_from_clause(p)
+    from_clause = _parse_from_clause(
+        p, require_from=p.dialect.supports_feature(Feature.require_from_for_delete)
+    )
     if from_clause is None:
         token = _next_or_else(p, "FROM")
         raise ParseError.from_unexpected_token(token, "FROM")
+    allow_using = p.dialect.supports_feature(Feature.delete_using)
+    using_clause = _parse_using_clause(p, allowed=allow_using)
     where_clause = _parse_where_clause(p)
-    order_by_clause = _parse_order_by_clause(p)
-    limit_clause = _parse_limit_clause(p)
-    return Delete((), delete, from_clause, where_clause, order_by_clause, limit_clause)
+    allow_limit = p.dialect.supports_feature(Feature.update_limit)
+    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
+    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
+    return Delete(
+        (),
+        None,
+        delete,
+        from_clause,
+        using_clause,
+        where_clause,
+        order_by_clause,
+        limit_clause,
+    )
 
 
 def _parse_select(p: Parser) -> Select:
+    if p.dialect.supports_feature(Feature.with_clause) and _next_is_keyword(p, "WITH"):
+        with_clause = _parse_with_clause(p)
+    else:
+        with_clause = None
     select = _expect_keyword(p, "SELECT")
     select_exprs = []
     while True:
@@ -487,6 +582,7 @@ def _parse_select(p: Parser) -> Select:
 
     return Select(
         (),
+        with_clause,
         select,
         select_exprs,
         from_clause,
@@ -504,12 +600,7 @@ def _parse_col_name(p: Parser) -> ColName:
     return ColName(name, comma)
 
 
-def _parse_into_clause(p: Parser) -> IntoClause:
-    if p.dialect.supports_feature(Feature.require_into_for_ignore):
-        into = _expect_keyword(p, "INTO")
-    else:
-        into = _maybe_consume_keyword(p, "INTO")
-    table = _parse_expression(p)
+def _maybe_parse_col_name_list(p: Parser) -> Optional[ColNameList]:
     if _next_is_punctuation(p, "("):
         open_paren = _expect_punctuation(p, "(")
         col_names = []
@@ -519,10 +610,19 @@ def _parse_into_clause(p: Parser) -> IntoClause:
             if col_name.trailing_comma is None:
                 break
         close_paren = _expect_punctuation(p, ")")
+        return ColNameList(open_paren, col_names, close_paren)
     else:
-        col_names = ()
-        open_paren = close_paren = None
-    return IntoClause(into, table, open_paren, col_names, close_paren)
+        return None
+
+
+def _parse_into_clause(p: Parser) -> IntoClause:
+    if p.dialect.supports_feature(Feature.require_into_for_ignore):
+        into = _expect_keyword(p, "INTO")
+    else:
+        into = _maybe_consume_keyword(p, "INTO")
+    table = _parse_expression(p)
+    col_names = _maybe_parse_col_name_list(p)
+    return IntoClause(into, table, col_names)
 
 
 def _parse_value_with_comma(p: Parser) -> ValueWithComma:
@@ -610,12 +710,46 @@ def _parse_replace(p: Parser) -> Replace:
     return Replace((), insert, into, values)
 
 
+def _parse_cte(p: Parser) -> CommonTableExpression:
+    name = _parse_identifier(p)
+    col_names = _maybe_parse_col_name_list(p)
+    as_kw = _expect_keyword(p, "AS")
+    subquery = _parse_subselect(p, require_parens=True)
+    trailing_comma = _maybe_consume_punctuation(p, ",")
+    return CommonTableExpression(name, col_names, as_kw, subquery, trailing_comma)
+
+
+def _parse_with_clause(p: Parser) -> WithClause:
+    kw = _expect_keyword(p, "WITH")
+    recursive_kw = _maybe_consume_keyword(p, "RECURSIVE")
+    ctes = []
+    while True:
+        expr = _parse_cte(p)
+        ctes.append(expr)
+        if expr.trailing_comma is None:
+            break
+
+    return WithClause(kw, recursive_kw, ctes)
+
+
+def _parse_with(p: Parser) -> Statement:
+    with_clause = _parse_with_clause(p)
+    token = p.pi.peek()
+    statement = _parse_statement(p)
+    if isinstance(statement, (Select, Update, Delete)):
+        return replace(statement, with_clause=with_clause)
+    if token is None:
+        raise EOFError("SELECT, UPDATE, or DELETE")
+    raise ParseError.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
     "DELETE": _parse_delete,
     "INSERT": _parse_insert,
     "REPLACE": _parse_replace,
+    "WITH": _parse_with,
 }
 
 
@@ -800,13 +934,7 @@ def _maybe_consume_keyword_sequence(
     for token in p.pi:
         consumed += 1
         expected = keywords[len(keywords_found)]
-        if expected in p.dialect.get_keywords():
-            condition = token.typ is TokenType.keyword and token.text == expected
-        else:
-            condition = (
-                token.typ is TokenType.identifier and token.text.upper() == expected
-            )
-        if condition:
+        if _token_is_keyword(p, token, expected):
             keywords_found.append(token)
             if len(keywords_found) == len(keywords):
                 return KeywordSequence(
@@ -820,29 +948,31 @@ def _maybe_consume_keyword_sequence(
     return None
 
 
-def _expect_keyword(p: Parser, keyword: str) -> Keyword:
+def _token_is_keyword(p: Parser, token: Optional[Token], keyword: str) -> bool:
+    if token is None:
+        return False
     is_hard = keyword in p.dialect.get_keywords()
-    token = _next_or_else(p, keyword)
     if is_hard:
-        condition = token.typ is TokenType.keyword and token.text == keyword
+        return token.typ is TokenType.keyword and token.text == keyword
     else:
-        condition = token.typ is TokenType.identifier and token.text.upper() == keyword
-    if not condition:
+        return token.typ is TokenType.identifier and token.text.upper() == keyword
+
+
+def _next_is_keyword(p: Parser, keyword: str) -> bool:
+    token = p.pi.peek()
+    return _token_is_keyword(p, token, keyword)
+
+
+def _expect_keyword(p: Parser, keyword: str) -> Keyword:
+    token = _next_or_else(p, keyword)
+    if not _token_is_keyword(p, token, keyword):
         raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
 
 
 def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
-    is_hard = keyword in p.dialect.get_keywords()
     for token in p.pi:
-        if is_hard:
-            condition = token.typ is TokenType.keyword and token.text == keyword
-        else:
-            condition = (
-                token.typ is TokenType.identifier and token.text.upper() == keyword
-            )
-
-        if condition:
+        if _token_is_keyword(p, token, keyword):
             return Keyword(token, token.text)
         else:
             p.pi.wind_back()

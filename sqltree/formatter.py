@@ -63,7 +63,10 @@ class Formatter(Visitor[None]):
             self.add_comments(kw.token.comments)
 
     def visit_FromClause(self, node: p.FromClause) -> None:
-        self.visit(node.kw)
+        if node.kw is None:
+            self.pieces.append("FROM")
+        else:
+            self.visit(node.kw)
         self.add_space()
         self.visit(node.table)
         self.pieces.append("\n")
@@ -108,22 +111,18 @@ class Formatter(Visitor[None]):
             self.pieces.append("INTO")
         self.add_space()
         self.visit(node.table)
-        if node.col_names:
-            if node.open_paren is not None:
-                self.visit(node.open_paren)
-            else:
-                self.pieces.append("(")
-            for col_name in node.col_names:
-                self.visit(col_name)
-            if node.close_paren is not None:
-                self.visit(node.close_paren)
-            else:
-                self.pieces.append(")")
+        self.maybe_visit(node.col_names)
         self.pieces.append("\n")
 
     def visit_ColName(self, node: p.ColName) -> None:
         self.visit(node.col_name)
         self.visit_trailing_comma(node.trailing_comma)
+
+    def visit_ColNameList(self, node: p.ColNameList) -> None:
+        self.visit(node.open_paren)
+        for col_name in node.col_names:
+            self.visit(col_name)
+        self.visit(node.close_paren)
 
     def visit_Subselect(self, node: p.Subselect) -> None:
         if node.left_paren is None:
@@ -198,7 +197,40 @@ class Formatter(Visitor[None]):
             self.visit(node.offset)
         self.pieces.append("\n")
 
+    def visit_CommonTableExpression(self, node: p.CommonTableExpression) -> None:
+        self.visit(node.table_name)
+        self.add_space()
+        if node.col_names is not None:
+            self.visit(node.col_names)
+            self.add_space()
+        self.visit(node.as_kw)
+        self.add_space()
+        self.visit(node.subquery)
+        self.visit_trailing_comma(node.trailing_comma)
+
+    def visit_WithClause(self, node: p.WithClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        if node.recursive_kw is not None:
+            self.visit(node.recursive_kw)
+            self.add_space()
+        for cte in node.ctes:
+            self.visit(cte)
+        self.pieces.append("\n")
+
+    def visit_TableNameWithComma(self, node: p.TableNameWithComma) -> None:
+        self.visit(node.table_name)
+        self.visit_trailing_comma(node.trailing_comma)
+
+    def visit_UsingClause(self, node: p.UsingClause) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        for table in node.tables:
+            self.visit(table)
+        self.pieces.append("\n")
+
     def visit_Select(self, node: p.Select) -> None:
+        self.maybe_visit(node.with_clause)
         self.visit(node.select_kw)
         self.add_space()
         for expr in node.select_exprs:
@@ -213,14 +245,17 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.limit)
 
     def visit_Delete(self, node: p.Delete) -> None:
+        self.maybe_visit(node.with_clause)
         self.visit(node.delete_kw)
         self.add_space()
         self.visit(node.from_clause)
+        self.maybe_visit(node.using_clause)
         self.maybe_visit(node.where)
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
 
     def visit_Update(self, node: p.Update) -> None:
+        self.maybe_visit(node.with_clause)
         self.visit(node.update_kw)
         self.add_space()
         self.visit(node.table)
