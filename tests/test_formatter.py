@@ -1,5 +1,7 @@
+import pytest
 from sqltree.dialect import Dialect, Vendor
 from sqltree.formatter import format
+from sqltree.parser import ParseError
 
 
 def test_select() -> None:
@@ -45,6 +47,10 @@ def test_update() -> None:
         )
         == "WITH x AS (SELECT x\nFROM y\n)\nUPDATE y\nSET x = 3\n"
     )
+    update_limit = "update y set x = 3 limit 1"
+    with pytest.raises(ParseError):
+        format(update_limit, Dialect(Vendor.redshift))
+    assert format(update_limit) == "UPDATE y\nSET x = 3\nLIMIT 1\n"
 
 
 def test_delete() -> None:

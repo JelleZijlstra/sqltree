@@ -506,8 +506,9 @@ def _parse_update(p: Parser) -> Update:
     table = _parse_expression(p)
     set_clause = _parse_set_clause(p)
     where_clause = _parse_where_clause(p)
-    order_by_clause = _parse_order_by_clause(p)
-    limit_clause = _parse_limit_clause(p)
+    allow_limit = p.dialect.supports_feature(Feature.update_limit)
+    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
+    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
     return Update(
         (), None, kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
