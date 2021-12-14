@@ -1,3 +1,4 @@
+from sqltree.dialect import Dialect, Vendor
 from sqltree.formatter import format
 
 
@@ -52,6 +53,10 @@ def test_insert() -> None:
     assert (
         format("insert ignore into x(a) values(1)")
         == "INSERT IGNORE INTO x(a)\nVALUES (1)\n"
+    )
+    assert (
+        format("insert into x(a) values(1)", Dialect(Vendor.redshift))
+        == "INSERT INTO x(a)\nVALUES (1)\n"
     )
 
 

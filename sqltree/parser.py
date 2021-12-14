@@ -324,6 +324,18 @@ def _parse_statement(p: Parser) -> Statement:
         if remaining is not None:
             raise ParseError.from_unexpected_token(remaining, "EOF")
         return statement
+    # In Redshift, INSERT is a soft keyword, so INSERT wouldn't match the previous expression.
+    elif first.typ is TokenType.identifier:
+        try:
+            parser = _VERB_TO_PARSER[first.text.upper()]
+        except KeyError:
+            raise ParseError(f"Unexpected {first.text!r}", first.loc)
+        else:
+            statement = parser(p)
+        remaining = p.pi.peek()
+        if remaining is not None:
+            raise ParseError.from_unexpected_token(remaining, "EOF")
+        return statement
     elif first.typ is TokenType.comment:
         p.pi.next()
         comment = Comment(first, first.text)
@@ -335,24 +347,24 @@ def _parse_statement(p: Parser) -> Statement:
 
 
 def _parse_from_clause(p: Parser) -> Optional[FromClause]:
-    if _next_is_keyword(p, "FROM"):
-        from_kw = _expect_keyword(p, "FROM")
+    from_kw = _maybe_consume_keyword(p, "FROM")
+    if from_kw is not None:
         table = _parse_expression(p)
         return FromClause(from_kw, table)
     return None
 
 
 def _parse_where_clause(p: Parser) -> Optional[WhereClause]:
-    if _next_is_keyword(p, "WHERE"):
-        kw = _expect_keyword(p, "WHERE")
+    kw = _maybe_consume_keyword(p, "WHERE")
+    if kw is not None:
         table = _parse_expression(p)
         return WhereClause(kw, table)
     return None
 
 
 def _parse_having_clause(p: Parser) -> Optional[HavingClause]:
-    if _next_is_keyword(p, "HAVING"):
-        kw = _expect_keyword(p, "HAVING")
+    kw = _maybe_consume_keyword(p, "HAVING")
+    if kw is not None:
         table = _parse_expression(p)
         return HavingClause(kw, table)
     return None
@@ -393,23 +405,23 @@ def _parse_set_clause(p: Parser) -> SetClause:
 
 
 def _parse_limit_clause(p: Parser) -> Optional[LimitClause]:
-    if _next_is_keyword(p, "LIMIT"):
-        kw = _expect_keyword(p, "LIMIT")
+    kw = _maybe_consume_keyword(p, "LIMIT")
+    if kw is not None:
         expr = _parse_simple_expression(p)
         return LimitClause(kw, expr)
     return None
 
 
 def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
-    if _next_is_keyword(p, "LIMIT"):
-        kw = _expect_keyword(p, "LIMIT")
+    kw = _maybe_consume_keyword(p, "LIMIT")
+    if kw is not None:
         expr = _parse_simple_expression(p)
         if _next_is_punctuation(p, ","):
             offset_leaf = _expect_punctuation(p, ",")
             offset = expr
             expr = _parse_simple_expression(p)
         else:
-            offset_leaf = _maybe_consume_soft_keyword(p, "OFFSET")
+            offset_leaf = _maybe_consume_keyword(p, "OFFSET")
             if offset_leaf is not None:
                 offset = _parse_simple_expression(p)
             else:
@@ -515,7 +527,7 @@ def _parse_value_list(p: Parser) -> ValueList:
 
 
 def _parse_values_clause(p: Parser) -> ValuesClause:
-    kw = _maybe_consume_soft_keyword(p, "VALUE")
+    kw = _maybe_consume_keyword(p, "VALUE")
     if kw is None:
         kw = _expect_keyword(p, "VALUES")
     value_lists = []
@@ -569,9 +581,9 @@ def _parse_identifier(p: Parser) -> Identifier:
 
 def _parse_select_expr(p: Parser) -> SelectExpr:
     expr = _parse_expression(p)
-    as_kw = alias = trailing_comma = None
-    if _next_is_keyword(p, "AS"):
-        as_kw = _expect_keyword(p, "AS")
+    alias = trailing_comma = None
+    as_kw = _maybe_consume_keyword(p, "AS")
+    if as_kw is not None:
         alias = _parse_identifier(p)
     if _next_is_punctuation(p, ","):
         trailing_comma = _expect_punctuation(p, ",")
@@ -579,8 +591,8 @@ def _parse_select_expr(p: Parser) -> SelectExpr:
 
 
 def _parse_value(p: Parser) -> Value:
-    if _next_is_keyword(p, "DEFAULT"):
-        kw = _expect_keyword(p, "DEFAULT")
+    kw = _maybe_consume_keyword(p, "DEFAULT")
+    if kw is not None:
         return Default(kw)
     else:
         return _parse_expression(p)
@@ -608,12 +620,9 @@ def _parse_order_by_list(p: Parser) -> Sequence[OrderByExpr]:
 
 def _parse_order_by_expr(p: Parser) -> OrderByExpr:
     expr = _parse_expression(p)
-    if _next_is_keyword(p, "ASC"):
-        direction = _expect_keyword(p, "ASC")
-    elif _next_is_keyword(p, "DESC"):
-        direction = _expect_keyword(p, "DESC")
-    else:
-        direction = None
+    direction = _maybe_consume_keyword(p, "ASC")
+    if direction is None:
+        direction = _maybe_consume_keyword(p, "DESC")
     trailing_comma = _maybe_consume_punctuation(p, ",")
     return OrderByExpr(expr, direction, trailing_comma)
 
@@ -764,33 +773,29 @@ def _maybe_consume_keyword_sequence(
     return None
 
 
-def _next_is_keyword(p: Parser, keyword: str) -> bool:
-    token = p.pi.peek()
-    return (
-        token is not None and token.typ is TokenType.keyword and token.text == keyword
-    )
-
-
 def _expect_keyword(p: Parser, keyword: str) -> Keyword:
+    is_hard = keyword in p.dialect.get_keywords()
     token = _next_or_else(p, keyword)
-    if token.typ is not TokenType.keyword or token.text != keyword:
+    if is_hard:
+        condition = token.typ is TokenType.keyword and token.text == keyword
+    else:
+        condition = token.typ is TokenType.identifier and token.text.upper() == keyword
+    if not condition:
         raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
 
 
 def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
+    is_hard = keyword in p.dialect.get_keywords()
     for token in p.pi:
-        if token.typ is TokenType.keyword and token.text == keyword:
-            return Keyword(token, token.text)
+        if is_hard:
+            condition = token.typ is TokenType.keyword and token.text == keyword
         else:
-            p.pi.wind_back()
-            break
-    return None
+            condition = (
+                token.typ is TokenType.identifier and token.text.upper() == keyword
+            )
 
-
-def _maybe_consume_soft_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
-    for token in p.pi:
-        if token.typ is TokenType.identifier and token.text.upper() == keyword:
+        if condition:
             return Keyword(token, token.text)
         else:
             p.pi.wind_back()
