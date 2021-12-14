@@ -1,13 +1,13 @@
 from functools import partial
 from typing import Sequence
 
-from sqltree.dialect import Dialect
+from sqltree.dialect import DEFAULT_DIALECT
 from sqltree.location import Location
 from sqltree.tokenizer import Token, TokenType, tokenize
 
 
 def check(sql: str, tokens: Sequence[Token]) -> None:
-    actual = list(tokenize(sql, Dialect.mysql))
+    actual = list(tokenize(sql, DEFAULT_DIALECT))
     assert actual == tokens
 
 
