@@ -1,7 +1,8 @@
 from dataclasses import dataclass, field, replace
 from typing import Iterable, Optional, Sequence, Tuple, Union
 
-from .keywords import MYSQL_KEYWORDS
+from sqltree.dialect import Dialect
+
 from .location import Location
 from .peeking_iterator import PeekingIterator
 from .tokenizer import Token, TokenType
@@ -33,6 +34,12 @@ class ParseError(Exception):
 
     def __str__(self) -> str:
         return f"{self.message}\n{self.location.display().rstrip()}"
+
+
+@dataclass
+class Parser:
+    pi: PeekingIterator[Token]
+    dialect: Dialect
 
 
 @dataclass
@@ -297,13 +304,13 @@ class Replace(Statement):
     values: ValuesClause
 
 
-def parse(tokens: Iterable[Token]) -> Statement:
-    pi = PeekingIterator(list(tokens))
-    return _parse_statement(pi)
+def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
+    p = Parser(PeekingIterator(list(tokens)), dialect)
+    return _parse_statement(p)
 
 
-def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
-    first = pi.peek()
+def _parse_statement(p: Parser) -> Statement:
+    first = p.pi.peek()
     if first is None:
         raise ValueError("SQL is empty")
     elif first.typ is TokenType.keyword:
@@ -312,146 +319,144 @@ def _parse_statement(pi: PeekingIterator[Token]) -> Statement:
         except KeyError:
             raise ParseError(f"Unexpected {first.text!r}", first.loc)
         else:
-            statement = parser(pi)
-        remaining = pi.peek()
+            statement = parser(p)
+        remaining = p.pi.peek()
         if remaining is not None:
             raise ParseError.from_unexpected_token(remaining, "EOF")
         return statement
     elif first.typ is TokenType.comment:
-        pi.next()
+        p.pi.next()
         comment = Comment(first, first.text)
-        statement = _parse_statement(pi)
+        statement = _parse_statement(p)
         leading_comments = (comment, *statement.leading_comments)
         return replace(statement, leading_comments=leading_comments)
     else:
         raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
 
-def _parse_from_clause(pi: PeekingIterator[Token]) -> Optional[FromClause]:
-    if _next_is_keyword(pi, "FROM"):
-        from_kw = _expect_keyword(pi, "FROM")
-        table = _parse_expression(pi)
+def _parse_from_clause(p: Parser) -> Optional[FromClause]:
+    if _next_is_keyword(p, "FROM"):
+        from_kw = _expect_keyword(p, "FROM")
+        table = _parse_expression(p)
         return FromClause(from_kw, table)
     return None
 
 
-def _parse_where_clause(pi: PeekingIterator[Token]) -> Optional[WhereClause]:
-    if _next_is_keyword(pi, "WHERE"):
-        kw = _expect_keyword(pi, "WHERE")
-        table = _parse_expression(pi)
+def _parse_where_clause(p: Parser) -> Optional[WhereClause]:
+    if _next_is_keyword(p, "WHERE"):
+        kw = _expect_keyword(p, "WHERE")
+        table = _parse_expression(p)
         return WhereClause(kw, table)
     return None
 
 
-def _parse_having_clause(pi: PeekingIterator[Token]) -> Optional[HavingClause]:
-    if _next_is_keyword(pi, "HAVING"):
-        kw = _expect_keyword(pi, "HAVING")
-        table = _parse_expression(pi)
+def _parse_having_clause(p: Parser) -> Optional[HavingClause]:
+    if _next_is_keyword(p, "HAVING"):
+        kw = _expect_keyword(p, "HAVING")
+        table = _parse_expression(p)
         return HavingClause(kw, table)
     return None
 
 
-def _parse_group_by_clause(pi: PeekingIterator[Token]) -> Optional[GroupByClause]:
-    kwseq = _maybe_consume_keyword_sequence(pi, ["GROUP", "BY"])
+def _parse_group_by_clause(p: Parser) -> Optional[GroupByClause]:
+    kwseq = _maybe_consume_keyword_sequence(p, ["GROUP", "BY"])
     if kwseq is not None:
-        exprs = _parse_order_by_list(pi)
+        exprs = _parse_order_by_list(p)
         return GroupByClause(kwseq, exprs)
     else:
         return None
 
 
-def _parse_order_by_clause(pi: PeekingIterator[Token]) -> Optional[OrderByClause]:
-    kwseq = _maybe_consume_keyword_sequence(pi, ["ORDER", "BY"])
+def _parse_order_by_clause(p: Parser) -> Optional[OrderByClause]:
+    kwseq = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
     if kwseq is not None:
-        exprs = _parse_order_by_list(pi)
+        exprs = _parse_order_by_list(p)
         return OrderByClause(kwseq, exprs)
     else:
         return None
 
 
-def _parse_assignment_list(pi: PeekingIterator[Token]) -> Sequence[Assignment]:
+def _parse_assignment_list(p: Parser) -> Sequence[Assignment]:
     assignments = []
     while True:
-        expr = _parse_assignment(pi)
+        expr = _parse_assignment(p)
         assignments.append(expr)
         if expr.trailing_comma is None:
             break
     return assignments
 
 
-def _parse_set_clause(pi: PeekingIterator[Token]) -> SetClause:
-    kw = _expect_keyword(pi, "SET")
-    assignments = _parse_assignment_list(pi)
+def _parse_set_clause(p: Parser) -> SetClause:
+    kw = _expect_keyword(p, "SET")
+    assignments = _parse_assignment_list(p)
     return SetClause(kw, assignments)
 
 
-def _parse_limit_clause(pi: PeekingIterator[Token]) -> Optional[LimitClause]:
-    if _next_is_keyword(pi, "LIMIT"):
-        kw = _expect_keyword(pi, "LIMIT")
-        expr = _parse_simple_expression(pi)
+def _parse_limit_clause(p: Parser) -> Optional[LimitClause]:
+    if _next_is_keyword(p, "LIMIT"):
+        kw = _expect_keyword(p, "LIMIT")
+        expr = _parse_simple_expression(p)
         return LimitClause(kw, expr)
     return None
 
 
-def _parse_select_limit_clause(
-    pi: PeekingIterator[Token],
-) -> Optional[SelectLimitClause]:
-    if _next_is_keyword(pi, "LIMIT"):
-        kw = _expect_keyword(pi, "LIMIT")
-        expr = _parse_simple_expression(pi)
-        if _next_is_punctuation(pi, ","):
-            offset_leaf = _expect_punctuation(pi, ",")
+def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
+    if _next_is_keyword(p, "LIMIT"):
+        kw = _expect_keyword(p, "LIMIT")
+        expr = _parse_simple_expression(p)
+        if _next_is_punctuation(p, ","):
+            offset_leaf = _expect_punctuation(p, ",")
             offset = expr
-            expr = _parse_simple_expression(pi)
+            expr = _parse_simple_expression(p)
         else:
-            offset_leaf = _maybe_consume_soft_keyword(pi, "OFFSET")
+            offset_leaf = _maybe_consume_soft_keyword(p, "OFFSET")
             if offset_leaf is not None:
-                offset = _parse_simple_expression(pi)
+                offset = _parse_simple_expression(p)
             else:
                 offset = None
         return SelectLimitClause(kw, expr, offset, offset_leaf)
     return None
 
 
-def _parse_update(pi: PeekingIterator[Token]) -> Update:
-    kw = _expect_keyword(pi, "UPDATE")
-    table = _parse_expression(pi)
-    set_clause = _parse_set_clause(pi)
-    where_clause = _parse_where_clause(pi)
-    order_by_clause = _parse_order_by_clause(pi)
-    limit_clause = _parse_limit_clause(pi)
+def _parse_update(p: Parser) -> Update:
+    kw = _expect_keyword(p, "UPDATE")
+    table = _parse_expression(p)
+    set_clause = _parse_set_clause(p)
+    where_clause = _parse_where_clause(p)
+    order_by_clause = _parse_order_by_clause(p)
+    limit_clause = _parse_limit_clause(p)
     return Update(
         (), kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
 
 
-def _parse_delete(pi: PeekingIterator[Token]) -> Delete:
-    delete = _expect_keyword(pi, "DELETE")
-    from_clause = _parse_from_clause(pi)
+def _parse_delete(p: Parser) -> Delete:
+    delete = _expect_keyword(p, "DELETE")
+    from_clause = _parse_from_clause(p)
     if from_clause is None:
-        token = _next_or_else(pi, "FROM")
+        token = _next_or_else(p, "FROM")
         raise ParseError.from_unexpected_token(token, "FROM")
-    where_clause = _parse_where_clause(pi)
-    order_by_clause = _parse_order_by_clause(pi)
-    limit_clause = _parse_limit_clause(pi)
+    where_clause = _parse_where_clause(p)
+    order_by_clause = _parse_order_by_clause(p)
+    limit_clause = _parse_limit_clause(p)
     return Delete((), delete, from_clause, where_clause, order_by_clause, limit_clause)
 
 
-def _parse_select(pi: PeekingIterator[Token]) -> Select:
-    select = _expect_keyword(pi, "SELECT")
+def _parse_select(p: Parser) -> Select:
+    select = _expect_keyword(p, "SELECT")
     select_exprs = []
     while True:
-        expr = _parse_select_expr(pi)
+        expr = _parse_select_expr(p)
         select_exprs.append(expr)
         if expr.trailing_comma is None:
             break
 
-    from_clause = _parse_from_clause(pi)
-    where_clause = _parse_where_clause(pi)
-    group_by_clause = _parse_group_by_clause(pi)
-    having_clause = _parse_having_clause(pi)
-    order_by_clause = _parse_order_by_clause(pi)
-    select_limit_clause = _parse_select_limit_clause(pi)
+    from_clause = _parse_from_clause(p)
+    where_clause = _parse_where_clause(p)
+    group_by_clause = _parse_group_by_clause(p)
+    having_clause = _parse_having_clause(p)
+    order_by_clause = _parse_order_by_clause(p)
+    select_limit_clause = _parse_select_limit_clause(p)
 
     return Select(
         (),
@@ -466,83 +471,83 @@ def _parse_select(pi: PeekingIterator[Token]) -> Select:
     )
 
 
-def _parse_col_name(pi: PeekingIterator[Token]) -> ColName:
-    name = _parse_identifier(pi)
-    comma = _maybe_consume_punctuation(pi, ",")
+def _parse_col_name(p: Parser) -> ColName:
+    name = _parse_identifier(p)
+    comma = _maybe_consume_punctuation(p, ",")
     return ColName(name, comma)
 
 
-def _parse_into_clause(pi: PeekingIterator[Token]) -> IntoClause:
-    into = _maybe_consume_keyword(pi, "INTO")  # INTO is optional, at least in MYSQL
-    table = _parse_expression(pi)
-    if _next_is_punctuation(pi, "("):
-        open_paren = _expect_punctuation(pi, "(")
+def _parse_into_clause(p: Parser) -> IntoClause:
+    into = _maybe_consume_keyword(p, "INTO")  # INTO is optional, at least in MYSQL
+    table = _parse_expression(p)
+    if _next_is_punctuation(p, "("):
+        open_paren = _expect_punctuation(p, "(")
         col_names = []
         while True:
-            col_name = _parse_col_name(pi)
+            col_name = _parse_col_name(p)
             col_names.append(col_name)
             if col_name.trailing_comma is None:
                 break
-        close_paren = _expect_punctuation(pi, ")")
+        close_paren = _expect_punctuation(p, ")")
     else:
         col_names = ()
         open_paren = close_paren = None
     return IntoClause(into, table, open_paren, col_names, close_paren)
 
 
-def _parse_value_with_comma(pi: PeekingIterator[Token]) -> ValueWithComma:
-    val = _parse_value(pi)
-    comma = _maybe_consume_punctuation(pi, ",")
+def _parse_value_with_comma(p: Parser) -> ValueWithComma:
+    val = _parse_value(p)
+    comma = _maybe_consume_punctuation(p, ",")
     return ValueWithComma(val, comma)
 
 
-def _parse_value_list(pi: PeekingIterator[Token]) -> ValueList:
-    open_paren = _expect_punctuation(pi, "(")
+def _parse_value_list(p: Parser) -> ValueList:
+    open_paren = _expect_punctuation(p, "(")
     values = []
     while True:
-        value = _parse_value_with_comma(pi)
+        value = _parse_value_with_comma(p)
         values.append(value)
         if value.trailing_comma is None:
             break
-    close_paren = _expect_punctuation(pi, ")")
-    comma = _maybe_consume_punctuation(pi, ",")
+    close_paren = _expect_punctuation(p, ")")
+    comma = _maybe_consume_punctuation(p, ",")
     return ValueList(open_paren, values, close_paren, comma)
 
 
-def _parse_values_clause(pi: PeekingIterator[Token]) -> ValuesClause:
-    kw = _maybe_consume_soft_keyword(pi, "VALUE")
+def _parse_values_clause(p: Parser) -> ValuesClause:
+    kw = _maybe_consume_soft_keyword(p, "VALUE")
     if kw is None:
-        kw = _expect_keyword(pi, "VALUES")
+        kw = _expect_keyword(p, "VALUES")
     value_lists = []
     while True:
-        value_list = _parse_value_list(pi)
+        value_list = _parse_value_list(p)
         value_lists.append(value_list)
         if value_list.trailing_comma is None:
             break
     return ValuesClause(kw, value_lists)
 
 
-def _parse_odku_clause(pi: PeekingIterator[Token]) -> Optional[OdkuClause]:
-    odku = _maybe_consume_keyword_sequence(pi, ["ON", "DUPLICATE", "KEY", "UPDATE"])
+def _parse_odku_clause(p: Parser) -> Optional[OdkuClause]:
+    odku = _maybe_consume_keyword_sequence(p, ["ON", "DUPLICATE", "KEY", "UPDATE"])
     if odku is None:
         return None
-    assignments = _parse_assignment_list(pi)
+    assignments = _parse_assignment_list(p)
     return OdkuClause(odku, assignments)
 
 
-def _parse_insert(pi: PeekingIterator[Token]) -> Insert:
-    insert = _expect_keyword(pi, "INSERT")
-    ignore = _maybe_consume_keyword(pi, "IGNORE")
-    into = _parse_into_clause(pi)
-    values = _parse_values_clause(pi)
-    odku = _parse_odku_clause(pi)
+def _parse_insert(p: Parser) -> Insert:
+    insert = _expect_keyword(p, "INSERT")
+    ignore = _maybe_consume_keyword(p, "IGNORE")
+    into = _parse_into_clause(p)
+    values = _parse_values_clause(p)
+    odku = _parse_odku_clause(p)
     return Insert((), insert, ignore, into, values, odku)
 
 
-def _parse_replace(pi: PeekingIterator[Token]) -> Replace:
-    insert = _expect_keyword(pi, "REPLACE")
-    into = _parse_into_clause(pi)
-    values = _parse_values_clause(pi)
+def _parse_replace(p: Parser) -> Replace:
+    insert = _expect_keyword(p, "REPLACE")
+    into = _parse_into_clause(p)
+    values = _parse_values_clause(p)
     return Replace((), insert, into, values)
 
 
@@ -555,61 +560,61 @@ _VERB_TO_PARSER = {
 }
 
 
-def _parse_identifier(pi: PeekingIterator[Token]) -> Identifier:
-    token = _next_or_else(pi, "identifier")
+def _parse_identifier(p: Parser) -> Identifier:
+    token = _next_or_else(p, "identifier")
     if token.typ is not TokenType.identifier:
         raise ParseError.from_unexpected_token(token, "identifier")
     return Identifier(token, token.text)
 
 
-def _parse_select_expr(pi: PeekingIterator[Token]) -> SelectExpr:
-    expr = _parse_expression(pi)
+def _parse_select_expr(p: Parser) -> SelectExpr:
+    expr = _parse_expression(p)
     as_kw = alias = trailing_comma = None
-    if _next_is_keyword(pi, "AS"):
-        as_kw = _expect_keyword(pi, "AS")
-        alias = _parse_identifier(pi)
-    if _next_is_punctuation(pi, ","):
-        trailing_comma = _expect_punctuation(pi, ",")
+    if _next_is_keyword(p, "AS"):
+        as_kw = _expect_keyword(p, "AS")
+        alias = _parse_identifier(p)
+    if _next_is_punctuation(p, ","):
+        trailing_comma = _expect_punctuation(p, ",")
     return SelectExpr(expr, as_kw, alias, trailing_comma)
 
 
-def _parse_value(pi: PeekingIterator[Token]) -> Value:
-    if _next_is_keyword(pi, "DEFAULT"):
-        kw = _expect_keyword(pi, "DEFAULT")
+def _parse_value(p: Parser) -> Value:
+    if _next_is_keyword(p, "DEFAULT"):
+        kw = _expect_keyword(p, "DEFAULT")
         return Default(kw)
     else:
-        return _parse_expression(pi)
+        return _parse_expression(p)
 
 
-def _parse_assignment(pi: PeekingIterator[Token]) -> Assignment:
-    colname = _parse_identifier(pi)
-    punc = _expect_punctuation(pi, "=")
-    value = _parse_value(pi)
-    if _next_is_punctuation(pi, ","):
-        trailing_comma = _expect_punctuation(pi, ",")
+def _parse_assignment(p: Parser) -> Assignment:
+    colname = _parse_identifier(p)
+    punc = _expect_punctuation(p, "=")
+    value = _parse_value(p)
+    if _next_is_punctuation(p, ","):
+        trailing_comma = _expect_punctuation(p, ",")
     else:
         trailing_comma = None
     return Assignment(colname, punc, value, trailing_comma)
 
 
-def _parse_order_by_list(pi: PeekingIterator[Token]) -> Sequence[OrderByExpr]:
+def _parse_order_by_list(p: Parser) -> Sequence[OrderByExpr]:
     exprs = []
     while True:
-        expr = _parse_order_by_expr(pi)
+        expr = _parse_order_by_expr(p)
         exprs.append(expr)
         if expr.trailing_comma is None:
             return exprs
 
 
-def _parse_order_by_expr(pi: PeekingIterator[Token]) -> OrderByExpr:
-    expr = _parse_expression(pi)
-    if _next_is_keyword(pi, "ASC"):
-        direction = _expect_keyword(pi, "ASC")
-    elif _next_is_keyword(pi, "DESC"):
-        direction = _expect_keyword(pi, "DESC")
+def _parse_order_by_expr(p: Parser) -> OrderByExpr:
+    expr = _parse_expression(p)
+    if _next_is_keyword(p, "ASC"):
+        direction = _expect_keyword(p, "ASC")
+    elif _next_is_keyword(p, "DESC"):
+        direction = _expect_keyword(p, "DESC")
     else:
         direction = None
-    trailing_comma = _maybe_consume_punctuation(pi, ",")
+    trailing_comma = _maybe_consume_punctuation(p, ",")
     return OrderByExpr(expr, direction, trailing_comma)
 
 
@@ -654,40 +659,40 @@ _BINOP_PRECEDENCE = [
 _MIN_PRECEDENCE = len(_BINOP_PRECEDENCE) - 1
 
 
-def _parse_expression(pi: PeekingIterator[Token]) -> Expression:
-    return _parse_binop(pi, _MIN_PRECEDENCE)
+def _parse_expression(p: Parser) -> Expression:
+    return _parse_binop(p, _MIN_PRECEDENCE)
 
 
-def _parse_binop(pi: PeekingIterator[Token], precedence: int) -> Expression:
+def _parse_binop(p: Parser, precedence: int) -> Expression:
     if precedence == 0:
-        left = _parse_simple_expression(pi)
+        left = _parse_simple_expression(p)
     else:
-        left = _parse_binop(pi, precedence - 1)
+        left = _parse_binop(p, precedence - 1)
     while True:
-        token = pi.peek()
+        token = p.pi.peek()
         if token is None:
             return left
         options = _BINOP_PRECEDENCE[precedence]
         if any(token.typ is typ and token.text == text for typ, text in options):
-            pi.next()
+            p.pi.next()
             if token.typ is TokenType.punctuation:
                 op = Punctuation(token, token.text)
             else:
                 assert token.typ is TokenType.keyword
                 op = Keyword(token, token.text)
-            right = _parse_binop(pi, precedence - 1)
+            right = _parse_binop(p, precedence - 1)
             left = BinOp(left, op, right)
         else:
             return left
 
 
-def _parse_simple_expression(pi: PeekingIterator[Token]) -> Expression:
-    token = _next_or_else(pi, "expression")
+def _parse_simple_expression(p: Parser) -> Expression:
+    token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation and token.text == "*":
         return Star(token)
     elif token.typ is TokenType.punctuation and token.text == "(":
-        inner = _parse_expression(pi)
-        right = _expect_punctuation(pi, ")")
+        inner = _parse_expression(p)
+        right = _expect_punctuation(p, ")")
         return Parenthesized(Punctuation(token, "("), inner, right)
     elif token.typ is TokenType.identifier:
         return Identifier(token, token.text)
@@ -705,8 +710,8 @@ def _parse_simple_expression(pi: PeekingIterator[Token]) -> Expression:
         raise ParseError.from_unexpected_token(token, "expression")
 
 
-def _next_is_punctuation(pi: PeekingIterator[Token], punctuation: str) -> bool:
-    token = pi.peek()
+def _next_is_punctuation(p: Parser, punctuation: str) -> bool:
+    token = p.pi.peek()
     return (
         token is not None
         and token.typ is TokenType.punctuation
@@ -714,34 +719,32 @@ def _next_is_punctuation(pi: PeekingIterator[Token], punctuation: str) -> bool:
     )
 
 
-def _maybe_consume_punctuation(
-    pi: PeekingIterator[Token], punctuation: str
-) -> Optional[Punctuation]:
-    for token in pi:
+def _maybe_consume_punctuation(p: Parser, punctuation: str) -> Optional[Punctuation]:
+    for token in p.pi:
         if token.typ is TokenType.punctuation and token.text == punctuation:
             return Punctuation(token, token.text)
         else:
-            pi.wind_back()
+            p.pi.wind_back()
             break
     return None
 
 
-def _expect_punctuation(pi: PeekingIterator[Token], punctuation: str) -> Punctuation:
-    token = _next_or_else(pi, punctuation)
+def _expect_punctuation(p: Parser, punctuation: str) -> Punctuation:
+    token = _next_or_else(p, punctuation)
     if token.typ is not TokenType.punctuation or token.text != punctuation:
         raise ParseError.from_unexpected_token(token, repr(punctuation))
     return Punctuation(token, token.text)
 
 
 def _maybe_consume_keyword_sequence(
-    pi: PeekingIterator[Token], keywords: Sequence[str]
+    p: Parser, keywords: Sequence[str]
 ) -> Optional[KeywordSequence]:
     keywords_found = []
     consumed = 0
-    for token in pi:
+    for token in p.pi:
         consumed += 1
         expected = keywords[len(keywords_found)]
-        if expected in MYSQL_KEYWORDS:
+        if expected in p.dialect.get_keywords():
             condition = token.typ is TokenType.keyword and token.text == expected
         else:
             condition = (
@@ -757,50 +760,46 @@ def _maybe_consume_keyword_sequence(
             break
 
     for _ in range(consumed):
-        pi.wind_back()
+        p.pi.wind_back()
     return None
 
 
-def _next_is_keyword(pi: PeekingIterator[Token], keyword: str) -> bool:
-    token = pi.peek()
+def _next_is_keyword(p: Parser, keyword: str) -> bool:
+    token = p.pi.peek()
     return (
         token is not None and token.typ is TokenType.keyword and token.text == keyword
     )
 
 
-def _expect_keyword(pi: PeekingIterator[Token], keyword: str) -> Keyword:
-    token = _next_or_else(pi, keyword)
+def _expect_keyword(p: Parser, keyword: str) -> Keyword:
+    token = _next_or_else(p, keyword)
     if token.typ is not TokenType.keyword or token.text != keyword:
         raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
 
 
-def _maybe_consume_keyword(
-    pi: PeekingIterator[Token], keyword: str
-) -> Optional[Keyword]:
-    for token in pi:
+def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
+    for token in p.pi:
         if token.typ is TokenType.keyword and token.text == keyword:
             return Keyword(token, token.text)
         else:
-            pi.wind_back()
+            p.pi.wind_back()
             break
     return None
 
 
-def _maybe_consume_soft_keyword(
-    pi: PeekingIterator[Token], keyword: str
-) -> Optional[Keyword]:
-    for token in pi:
+def _maybe_consume_soft_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
+    for token in p.pi:
         if token.typ is TokenType.identifier and token.text.upper() == keyword:
             return Keyword(token, token.text)
         else:
-            pi.wind_back()
+            p.pi.wind_back()
             break
     return None
 
 
-def _next_or_else(pi: PeekingIterator[Token], label: str) -> Token:
+def _next_or_else(p: Parser, label: str) -> Token:
     try:
-        return pi.next()
+        return p.pi.next()
     except StopIteration:
         raise EOFError(label)
