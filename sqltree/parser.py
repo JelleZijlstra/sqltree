@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field, replace
 from typing import Iterable, Optional, Sequence, Tuple, Union
 
-from sqltree.dialect import Dialect
+from sqltree.dialect import Dialect, Feature
 
 from .location import Location
 from .peeking_iterator import PeekingIterator
@@ -283,6 +283,21 @@ class ValuesClause(Node):
 
 
 @dataclass
+class DefaultValues(Node):
+    kwseq: KeywordSequence = field(compare=False, repr=False)
+
+
+@dataclass
+class Subselect(Node):
+    left_paren: Optional[Punctuation]
+    select: Select
+    right_paren: Optional[Punctuation]
+
+
+InsertValues = Union[ValuesClause, DefaultValues, Subselect]
+
+
+@dataclass
 class OdkuClause(Node):
     kwseq: KeywordSequence
     assignments: Sequence[Assignment]
@@ -293,7 +308,7 @@ class Insert(Statement):
     insert_kw: Keyword = field(compare=False, repr=False)
     ignore_kw: Optional[Keyword]
     into: IntoClause
-    values: ValuesClause
+    values: InsertValues
     odku: Optional[OdkuClause] = None
 
 
@@ -301,7 +316,7 @@ class Insert(Statement):
 class Replace(Statement):
     replace_kw: Keyword = field(compare=False, repr=False)
     into: IntoClause
-    values: ValuesClause
+    values: InsertValues
 
 
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
@@ -490,7 +505,10 @@ def _parse_col_name(p: Parser) -> ColName:
 
 
 def _parse_into_clause(p: Parser) -> IntoClause:
-    into = _maybe_consume_keyword(p, "INTO")  # INTO is optional, at least in MYSQL
+    if p.dialect.supports_feature(Feature.require_into_for_ignore):
+        into = _expect_keyword(p, "INTO")
+    else:
+        into = _maybe_consume_keyword(p, "INTO")
     table = _parse_expression(p)
     if _next_is_punctuation(p, "("):
         open_paren = _expect_punctuation(p, "(")
@@ -526,10 +544,34 @@ def _parse_value_list(p: Parser) -> ValueList:
     return ValueList(open_paren, values, close_paren, comma)
 
 
-def _parse_values_clause(p: Parser) -> ValuesClause:
-    kw = _maybe_consume_keyword(p, "VALUE")
+def _parse_subselect(p: Parser, require_parens: bool) -> Subselect:
+    if not require_parens:
+        select = _parse_select(p)
+        return Subselect(None, select, None)
+    left = _expect_punctuation(p, "(")
+    select = _parse_select(p)
+    right = _expect_punctuation(p, ")")
+    return Subselect(left, select, right)
+
+
+def _parse_values_clause(p: Parser) -> InsertValues:
+    if p.dialect.supports_feature(Feature.default_values_on_insert):
+        kwseq = _maybe_consume_keyword_sequence(p, ["DEFAULT", "VALUES"])
+        if kwseq is not None:
+            return DefaultValues(kwseq)
+    if p.dialect.supports_feature(Feature.support_value_for_insert):
+        kw = _maybe_consume_keyword(p, "VALUE")
+    else:
+        kw = None
     if kw is None:
-        kw = _expect_keyword(p, "VALUES")
+        kw = _maybe_consume_keyword(p, "VALUES")
+        if kw is None:
+            return _parse_subselect(
+                p,
+                require_parens=p.dialect.supports_feature(
+                    Feature.insert_select_require_parens
+                ),
+            )
     value_lists = []
     while True:
         value_list = _parse_value_list(p)
@@ -549,7 +591,10 @@ def _parse_odku_clause(p: Parser) -> Optional[OdkuClause]:
 
 def _parse_insert(p: Parser) -> Insert:
     insert = _expect_keyword(p, "INSERT")
-    ignore = _maybe_consume_keyword(p, "IGNORE")
+    if p.dialect.supports_feature(Feature.insert_ignore):
+        ignore = _maybe_consume_keyword(p, "IGNORE")
+    else:
+        ignore = None
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
     odku = _parse_odku_clause(p)
@@ -558,6 +603,8 @@ def _parse_insert(p: Parser) -> Insert:
 
 def _parse_replace(p: Parser) -> Replace:
     insert = _expect_keyword(p, "REPLACE")
+    if not p.dialect.supports_feature(Feature.replace):
+        raise ParseError(f"{p.dialect} does not support REPLACE", insert.token.loc)
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
     return Replace((), insert, into, values)

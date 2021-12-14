@@ -58,6 +58,18 @@ def test_insert() -> None:
         format("insert into x(a) values(1)", Dialect(Vendor.redshift))
         == "INSERT INTO x(a)\nVALUES (1)\n"
     )
+    assert (
+        format("insert into x(a) default   values", Dialect(Vendor.redshift))
+        == "INSERT INTO x(a)\nDEFAULT VALUES\n"
+    )
+    assert (
+        format("insert into x(a) (select x from y)", Dialect(Vendor.redshift))
+        == "INSERT INTO x(a)\n(SELECT x\nFROM y\n)\n"
+    )
+    assert (
+        format("insert into x(a) select x from y")
+        == "INSERT INTO x(a)\nSELECT x\nFROM y\n"
+    )
 
 
 def test_replace() -> None:

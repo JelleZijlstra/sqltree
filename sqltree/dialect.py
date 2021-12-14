@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass
-from typing import Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple, Union
 
 Version = Optional[Tuple[int, ...]]
 
@@ -11,6 +11,18 @@ class Vendor(enum.Enum):
     redshift = 3
 
 
+class Feature(enum.Enum):
+    require_into_for_ignore = 1  # allow omitting INTO in INSERT INTO
+    support_value_for_insert = 2  # support using VALUE instead of VALUES in INSERT
+    insert_ignore = 3  # INSERT IGNORE
+    default_values_on_insert = 4  # INSERT ... DEFAULT VALUES
+    insert_select_require_parens = (
+        5  # INSERT ... SELECT requires parentheses around the SELECT
+    )
+    replace = 6  # REPLACE statement
+    with_clause = 7  # leading WITH clause in DELETE, UPDATE, SELECT
+
+
 @dataclass
 class Dialect:
     vendor: Vendor
@@ -18,12 +30,27 @@ class Dialect:
     version: Version = None
     _keywords: Optional[Set[str]] = None
 
+    def __str__(self) -> str:
+        name = self.vendor.name
+        if self.version is not None:
+            name += " " + ".".join(map(str, self.version))
+        return name
+
     def get_keywords(self) -> Set[str]:
         if self._keywords is not None:
             return self._keywords
         keywords = _compute_keywords(self.vendor, self.version)
         self._keywords = keywords
         return keywords
+
+    def supports_feature(self, feature: Feature) -> bool:
+        value = _FEATURES[feature].get(self.vendor, True)
+        if isinstance(value, bool):
+            return value
+        start_version, end_version = value
+        return version_is_in(
+            self.version, start_version=start_version, end_version=end_version
+        )
 
 
 DEFAULT_DIALECT = Dialect(Vendor.mysql)
@@ -48,6 +75,24 @@ def version_is_in(
     if end_version is not None and version >= end_version:
         return False
     return True
+
+
+# Values can be either a boolean (indicating support across all versions) or a version range
+_FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
+    Feature.require_into_for_ignore: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.support_value_for_insert: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.insert_ignore: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.default_values_on_insert: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.insert_select_require_parens: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.replace: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.with_clause: {
+        Vendor.mysql: False,
+        Vendor.presto: True,
+        Vendor.redshift: True,
+    },
+}
+_missing_features = set(Feature) - set(_FEATURES)
+assert not _missing_features, f"missing settings for {_missing_features}"
 
 
 # from https://dev.mysql.com/doc/refman/5.7/en/keywords.html#keywords-in-current-series

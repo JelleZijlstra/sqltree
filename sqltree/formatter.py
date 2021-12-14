@@ -125,6 +125,16 @@ class Formatter(Visitor[None]):
         self.visit(node.col_name)
         self.visit_trailing_comma(node.trailing_comma)
 
+    def visit_Subselect(self, node: p.Subselect) -> None:
+        if node.left_paren is None:
+            self.visit(node.select)
+        else:
+            # TODO improve this formatting
+            self.visit(node.left_paren)
+            self.visit(node.select)
+            assert node.right_paren is not None, "both parens must be set"
+            self.visit(node.right_paren)
+
     def visit_ValuesClause(self, node: p.ValuesClause) -> None:
         if node.kw.text == "VALUES":
             self.visit(node.kw)
@@ -134,6 +144,10 @@ class Formatter(Visitor[None]):
         self.add_space()
         for value_list in node.value_lists:
             self.visit(value_list)
+        self.pieces.append("\n")
+
+    def visit_DefaultValues(self, node: p.DefaultValues) -> None:
+        self.visit(node.kwseq)
         self.pieces.append("\n")
 
     def visit_ValueList(self, node: p.ValueList) -> None:
@@ -216,6 +230,11 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
 
+    def _visit_insert_values(self, node: p.InsertValues) -> None:
+        self.visit(node)
+        if isinstance(node, p.Subselect) and node.left_paren is not None:
+            self.pieces.append("\n")
+
     def visit_Insert(self, node: p.Insert) -> None:
         self.visit(node.insert_kw)
         self.add_space()
@@ -223,14 +242,14 @@ class Formatter(Visitor[None]):
             self.visit(node.ignore_kw)
             self.add_space()
         self.visit(node.into)
-        self.visit(node.values)
+        self._visit_insert_values(node.values)
         self.maybe_visit(node.odku)
 
     def visit_Replace(self, node: p.Replace) -> None:
         self.visit(node.replace_kw)
         self.add_space()
         self.visit(node.into)
-        self.visit(node.values)
+        self._visit_insert_values(node.values)
 
     def visit_Keyword(self, node: p.Keyword) -> None:
         self.pieces.append(node.text.upper())
