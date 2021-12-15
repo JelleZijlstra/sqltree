@@ -93,9 +93,17 @@ class Formatter(Visitor[None]):
         if self.indent:
             line.append(" " * self.indent)
 
+    def force_indentation(self) -> None:
+        if self.line_has_content:
+            self.start_new_line()
+        else:
+            needed = self.indent - self.current_line_length
+            self.lines[-1].append(" " * needed)
+
     def clear_trailing_space(self) -> None:
         if self.lines[-1] and self.lines[-1][-1].endswith(" "):
             self.lines[-1][-1] = self.lines[-1][-1][:-1]
+            self.current_line_length -= 1
 
     def add_comments(self, comments: Sequence[Token]) -> None:
         if comments:
@@ -409,6 +417,8 @@ class Formatter(Visitor[None]):
             self.clear_trailing_space()
             with self.add_indent():
                 self.visit_BinOp_multiline(node)
+            if self.parent_isinstance(p.Parenthesized):
+                self.start_new_line()
         else:
             self.visit(node.left)
             self.add_space()
@@ -416,10 +426,9 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(node.right)
 
-    def visit_BinOp_multiline(self, node: p.BinOp, *, newline: bool = True) -> None:
+    def visit_BinOp_multiline(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()
-        if newline:
-            self.start_new_line()
+        self.force_indentation()
         self._maybe_multiline(node.left, precedence)
         self.start_new_line()
         self.visit(node.op)
@@ -428,7 +437,7 @@ class Formatter(Visitor[None]):
 
     def _maybe_multiline(self, node: p.Node, precedence: int) -> None:
         if isinstance(node, p.BinOp) and node.get_precedence() == precedence:
-            self.visit_BinOp_multiline(node, newline=False)
+            self.visit_BinOp_multiline(node)
         else:
             self.visit(node)
 

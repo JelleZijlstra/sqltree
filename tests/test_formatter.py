@@ -82,6 +82,39 @@ def test_select() -> None:
         LIMIT 4
         """
     )
+    assert (
+        format(
+            "select max(x) from y where x = 1 and y = 2 or x = 2 and y = 1 limit 4",
+            indent=8,
+        )
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+                x = 1
+                AND y = 2
+            OR
+                x = 2
+                AND y = 1
+        LIMIT 4
+        """
+    )
+    assert (
+        format(
+            "select max(x) from y where (x = 1 or y = 2) and z = 3 limit 4", indent=8
+        )
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+            (
+                x = 1
+                OR y = 2
+            )
+            AND z = 3
+        LIMIT 4
+        """
+    )
 
 
 def test_update() -> None:
