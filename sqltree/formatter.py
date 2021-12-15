@@ -498,7 +498,7 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(node.for_what)
         self.visit(node.left_paren)
-        self.write_comma_list(node.index_list)
+        self.write_comma_list(node.index_list, with_space=False)
         self.visit(node.right_paren)
 
     def visit_JoinOn(self, node: p.JoinOn) -> None:
@@ -558,7 +558,11 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.maybe_visit(node.as_kw, else_write="AS", add_space=True)
             self.visit(node.alias)
-        self.write_comma_list(node.index_hint_list)
+        for index_hint in node.index_hint_list:
+            self.start_new_line()
+            self.visit(index_hint.node)
+            if index_hint.trailing_comma is not None:
+                self.visit(index_hint.trailing_comma)
 
     def visit_SubQueryFactor(self, node: p.SubqueryFactor) -> None:
         self.maybe_visit(node.lateral_kw, add_space=True)
@@ -572,7 +576,7 @@ class Formatter(Visitor[None]):
 
     def visit_TableReferenceList(self, node: p.TableReferenceList) -> None:
         self.visit(node.left_paren)
-        self.write_comma_list(node.references)
+        self.write_comma_list(node.references, with_space=False)
         self.visit(node.right_paren)
 
 

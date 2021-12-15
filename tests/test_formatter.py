@@ -130,6 +130,23 @@ def test_select() -> None:
     )
 
 
+def test_table_reference() -> None:
+    assert format("select x from y use index(z)") == "SELECT x\nFROM y\nUSE INDEX(z)\n"
+    assert (
+        format("select x from y use index(z), ignore key for join(z)")
+        == "SELECT x\nFROM y\nUSE INDEX(z),\nIGNORE KEY FOR JOIN(z)\n"
+    )
+    assert (
+        format("select x from y use index(z), ignore key for order by   (z)")
+        == "SELECT x\nFROM y\nUSE INDEX(z),\nIGNORE KEY FOR ORDER BY(z)\n"
+    )
+    assert format("select x from y use index()") == "SELECT x\nFROM y\nUSE INDEX()\n"
+    with pytest.raises(ParseError):
+        format("select x from y force index()")
+
+    assert format("select x from (a, b)") == "SELECT x\nFROM (a, b)\n"
+
+
 def test_update() -> None:
     assert (
         format("update x set y = default, z =3 where x=4 order   by z limit 1")
