@@ -68,7 +68,7 @@ class Node:
     pass
 
 
-NodeT = TypeVar("NodeT", bound=Node)
+NodeT = TypeVar("NodeT", bound=Node, covariant=True)
 
 
 @dataclass
@@ -135,6 +135,10 @@ class BinOp(Expression):
     left: Expression
     op: Union[Punctuation, Keyword]
     right: Expression
+
+    def get_precedence(self) -> int:
+        op = self.op.text
+        return _PRECEDENCE_OF_OP[op]
 
 
 @dataclass
@@ -845,6 +849,12 @@ _BINOP_PRECEDENCE = [
     (K("OR"), P("||")),
 ]
 _MIN_PRECEDENCE = len(_BINOP_PRECEDENCE) - 1
+_PRECEDENCE_OF_OP = {
+    text: precedence
+    for precedence, ops in enumerate(_BINOP_PRECEDENCE)
+    for _, text in ops
+}
+MIN_BOOLEAN_PRECEDENCE = _PRECEDENCE_OF_OP["AND"]
 
 
 def _parse_expression(p: Parser) -> Expression:

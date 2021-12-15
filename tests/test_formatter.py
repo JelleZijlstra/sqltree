@@ -33,7 +33,7 @@ def test_select() -> None:
     )
     assert (
         format("with x as (select x from y) select y from x", Dialect(Vendor.redshift))
-        == "WITH x AS (SELECT x\nFROM y\n)\nSELECT y\nFROM x\n"
+        == "WITH x AS (\n    SELECT x\n    FROM y)\nSELECT y\nFROM x\n"
     )
     select_limit_all = "select y from x limit all"
     assert (
@@ -46,10 +46,74 @@ def test_select() -> None:
     assert (
         format(
             "select max(x) from y where x = some(function, many, args) and y ="
-            " no_args()"
+            " no_args()",
+            indent=8,
         )
-        == "SELECT max(x)\nFROM y\nWHERE x = some(function, many, args) AND y ="
-        " no_args()\n"
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+            x = some(function, many, args)
+            AND y = no_args()
+        """
+    )
+    assert (
+        format(
+            "select aaaaaa, bbbbbbbb, ccccc, dddddd from x", line_length=20, indent=8
+        )
+        == """
+        SELECT
+            aaaaaa,
+            bbbbbbbb,
+            ccccc,
+            dddddd
+        FROM x
+        """
+    )
+    assert (
+        format("select max(x) from y where x = 1 and y = 2 and z = 3 limit 4", indent=8)
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+            x = 1
+            AND y = 2
+            AND z = 3
+        LIMIT 4
+        """
+    )
+    assert (
+        format(
+            "select max(x) from y where x = 1 and y = 2 or x = 2 and y = 1 limit 4",
+            indent=8,
+        )
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+                x = 1
+                AND y = 2
+            OR
+                x = 2
+                AND y = 1
+        LIMIT 4
+        """
+    )
+    assert (
+        format(
+            "select max(x) from y where (x = 1 or y = 2) and z = 3 limit 4", indent=8
+        )
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+            (
+                x = 1
+                OR y = 2
+            )
+            AND z = 3
+        LIMIT 4
+        """
     )
 
 
@@ -62,7 +126,7 @@ def test_update() -> None:
         format(
             "with x as (select x from y) update y set x = 3", Dialect(Vendor.redshift)
         )
-        == "WITH x AS (SELECT x\nFROM y\n)\nUPDATE y\nSET x = 3\n"
+        == "WITH x AS (\n    SELECT x\n    FROM y)\nUPDATE y\nSET x = 3\n"
     )
     update_limit = "update y set x = 3 limit 1"
     with pytest.raises(ParseError):
@@ -77,14 +141,22 @@ def test_delete() -> None:
     )
     assert (
         format("with x as (select x from y) delete from y", Dialect(Vendor.redshift))
-        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\n"
+        == "WITH x AS (\n    SELECT x\n    FROM y)\nDELETE FROM y\n"
     )
     assert (
         format(
             "with x as (select x from y) delete from y using z, a where x = 4",
             Dialect(Vendor.redshift),
+            indent=8,
         )
-        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\nUSING z, a\nWHERE x = 4\n"
+        == """
+        WITH x AS (
+            SELECT x
+            FROM y)
+        DELETE FROM y
+        USING z, a
+        WHERE x = 4
+        """
     )
 
 
@@ -108,14 +180,22 @@ def test_insert() -> None:
     )
     assert (
         format("insert into x(a) (select x from y)", Dialect(Vendor.redshift))
-        == "INSERT INTO x(a)\n(SELECT x\nFROM y\n)\n"
+        == "INSERT INTO x(a) (\n    SELECT x\n    FROM y)\n"
     )
     assert (
         format(
             "insert into x(a) ( with x as (select z from a) select x from y)",
             Dialect(Vendor.redshift),
+            indent=8,
         )
-        == "INSERT INTO x(a)\n(WITH x AS (SELECT z\nFROM a\n)\nSELECT x\nFROM y\n)\n"
+        == """
+        INSERT INTO x(a) (
+            WITH x AS (
+                SELECT z
+                FROM a)
+            SELECT x
+            FROM y)
+        """
     )
     assert (
         format("insert into x(a) select x from y")
