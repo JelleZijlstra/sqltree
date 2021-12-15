@@ -147,6 +147,59 @@ def test_table_reference() -> None:
     assert format("select x from (a, b)") == "SELECT x\nFROM (a, b)\n"
     assert format("select x from a, b") == "SELECT x\nFROM a, b\n"
 
+    assert (
+        format("select x from a join b", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        """
+    )
+    assert (
+        format("select x from a join b join c", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        JOIN
+            c
+        """
+    )
+    assert (
+        format("select x from a join b on x = y join c on y = x", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        ON x = y
+        JOIN
+            c
+        ON y = x
+        """
+    )
+    assert (
+        format("select x from a join b on x = y join c on y = x and c = d", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        ON x = y
+        JOIN
+            c
+        ON
+            y = x
+            AND c = d
+        """
+    )
+
 
 def test_update() -> None:
     assert (

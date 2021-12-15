@@ -501,11 +501,13 @@ class Formatter(Visitor[None]):
         self.visit(node.right_paren)
 
     def visit_JoinOn(self, node: p.JoinOn) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         self.visit(node.search_condition)
 
     def visit_JoinUsing(self, node: p.JoinUsing) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         self.visit(node.left_paren)
@@ -513,42 +515,42 @@ class Formatter(Visitor[None]):
         self.visit(node.right_paren)
 
     def visit_SimpleJoinedTable(self, node: p.SimpleJoinedTable):
-        self.visit_join(
-            node.left,
-            [node.inner_cross, node.join_kw],
-            node.right,
-            node.join_specification,
-        )
+        self.visit_join(node)
 
     def visit_LeftRightJoinedTable(self, node: p.LeftRightJoinedTable):
-        self.visit_join(
-            node.left,
-            [node.left_right, node.outer_kw, node.join_kw],
-            node.right,
-            node.join_specification,
-        )
+        self.visit_join(node)
 
     def visit_NaturalJoinedTable(self, node: p.NaturalJoinedTable):
-        self.visit_join(
-            node.left,
-            [node.natural_kw, node.left_right, node.inner_outer, node.join_kw],
-            node.right,
-        )
+        self.visit_join(node)
 
-    def visit_join(
-        self,
-        left: p.TableReference,
-        kws: Sequence[Optional[p.Keyword]],
-        right: p.TableReference,
-        join_spec: Optional[p.JoinSpecification] = None,
-    ) -> None:
-        self.visit(left)
-        self.add_space()
+    def visit_join(self, node: p.JoinedTable, *, skip_indent: bool = False) -> None:
+        if isinstance(node, (p.SimpleJoinedTable, p.LeftRightJoinedTable)):
+            join_spec = node.join_specification
+        else:
+            join_spec = None
+        if isinstance(node, p.SimpleJoinedTable):
+            kws = [node.inner_cross, node.join_kw]
+        elif isinstance(node, p.LeftRightJoinedTable):
+            kws = [node.left_right, node.outer_kw, node.join_kw]
+        else:
+            kws = [node.natural_kw, node.left_right, node.inner_outer, node.join_kw]
+        if isinstance(
+            node.left,
+            (p.SimpleJoinedTable, p.LeftRightJoinedTable, p.NaturalJoinedTable),
+        ):
+            self.visit(node.left)
+        else:
+            self.clear_trailing_space()
+            with self.add_indent():
+                self.start_new_line()
+                self.visit(node.left)
+        self.start_new_line()
         for kw in kws:
             if kw is not None:
                 self.visit(kw)
-        self.add_space()
-        self.visit(right)
+        with self.add_indent():
+            self.start_new_line()
+            self.visit(node.right)
         self.maybe_visit(join_spec)
 
     def visit_SimpleTableFactor(self, node: p.SimpleTableFactor) -> None:
