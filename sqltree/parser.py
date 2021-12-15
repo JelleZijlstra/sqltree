@@ -1,6 +1,14 @@
 from dataclasses import dataclass, field, replace
-from typing import (Callable, Generic, Iterable, Optional, Sequence, Tuple,
-                    TypeVar, Union)
+from typing import (
+    Callable,
+    Generic,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from sqltree.dialect import Dialect, Feature
 
@@ -60,7 +68,7 @@ class Node:
     pass
 
 
-NodeT = TypeVar("NodeT", bound=Node)
+NodeT = TypeVar("NodeT", bound=Node, covariant=True)
 
 
 @dataclass

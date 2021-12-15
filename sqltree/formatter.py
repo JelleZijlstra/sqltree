@@ -141,26 +141,28 @@ class Formatter(Visitor[None]):
         self.add_space()
         self.visit(node.conditions)
 
+    def write_comma_list(
+        self, nodes: Sequence[p.WithTrailingComma[p.Node]], with_space: bool = True
+    ) -> None:
+        if with_space:
+            self.add_space()
+        for node in nodes:
+            self.visit(node)
+
     def visit_GroupByClause(self, node: p.GroupByClause) -> None:
         self.start_new_line()
         self.visit(node.kwseq)
-        self.add_space()
-        for expr in node.expr:
-            self.visit(expr)
+        self.write_comma_list(node.expr)
 
     def visit_OrderByClause(self, node: p.OrderByClause) -> None:
         self.start_new_line()
         self.visit(node.kwseq)
-        self.add_space()
-        for expr in node.expr:
-            self.visit(expr)
+        self.write_comma_list(node.expr)
 
     def visit_SetClause(self, node: p.SetClause) -> None:
         self.start_new_line()
         self.visit(node.kw)
-        self.add_space()
-        for assignment in node.assignments:
-            self.visit(assignment)
+        self.write_comma_list(node.assignments)
 
     def visit_IntoClause(self, node: p.IntoClause) -> None:
         if node.kw is not None:
@@ -173,8 +175,7 @@ class Formatter(Visitor[None]):
 
     def visit_ColNameList(self, node: p.ColNameList) -> None:
         self.visit(node.open_paren)
-        for col_name in node.col_names:
-            self.visit(col_name)
+        self.write_comma_list(node.col_names, with_space=False)
         self.visit(node.close_paren)
 
     def visit_Subselect(self, node: p.Subselect) -> None:
@@ -194,9 +195,7 @@ class Formatter(Visitor[None]):
         else:
             self.write("VALUES")
             self.add_comments_from_leaf(node.kw)
-        self.add_space()
-        for value_list in node.value_lists:
-            self.visit(value_list)
+        self.write_comma_list(node.value_lists)
 
     def visit_DefaultValues(self, node: p.DefaultValues) -> None:
         self.start_new_line()
@@ -204,16 +203,13 @@ class Formatter(Visitor[None]):
 
     def visit_ValueList(self, node: p.ValueList) -> None:
         self.visit(node.open_paren)
-        for value in node.values:
-            self.visit(value)
+        self.write_comma_list(node.values, with_space=False)
         self.visit(node.close_paren)
 
     def visit_OdkuClause(self, node: p.OdkuClause) -> None:
         self.start_new_line()
         self.visit(node.kwseq)
-        self.add_space()
-        for assignment in node.assignments:
-            self.visit(assignment)
+        self.write_comma_list(node.assignments)
 
     def visit_Assignment(self, node: p.Assignment) -> None:
         self.visit(node.col_name)
@@ -260,28 +256,21 @@ class Formatter(Visitor[None]):
     def visit_WithClause(self, node: p.WithClause) -> None:
         self.start_new_line()
         self.visit(node.kw)
-        self.add_space()
         if node.recursive_kw is not None:
-            self.visit(node.recursive_kw)
             self.add_space()
-        for cte in node.ctes:
-            self.visit(cte)
+            self.visit(node.recursive_kw)
+        self.write_comma_list(node.ctes)
 
     def visit_UsingClause(self, node: p.UsingClause) -> None:
         self.start_new_line()
         self.visit(node.kw)
-        self.add_space()
-        for table in node.tables:
-            self.visit(table)
+        self.write_comma_list(node.tables)
 
     def visit_Select(self, node: p.Select) -> None:
         self.maybe_visit(node.with_clause)
         self.start_new_line()
         self.visit(node.select_kw)
-        self.add_space()
-        for expr in node.select_exprs:
-            self.visit(expr)
-
+        self.write_comma_list(node.select_exprs)
         self.maybe_visit(node.from_clause)
         self.maybe_visit(node.where)
         self.maybe_visit(node.group_by)
@@ -362,8 +351,7 @@ class Formatter(Visitor[None]):
     def visit_FunctionCall(self, node: p.FunctionCall) -> None:
         self.visit(node.callee)
         self.visit(node.left_paren)
-        for arg in node.args:
-            self.visit(arg)
+        self.write_comma_list(node.args, with_space=False)
         self.visit(node.right_paren)
 
     def visit_Parenthesized(self, node: p.Parenthesized) -> None:
