@@ -8,8 +8,12 @@ from .peeking_iterator import PeekingIterator
 from .tokenizer import Token, TokenType
 
 
+class ParseError(Exception):
+    pass
+
+
 @dataclass
-class EOFError(Exception):
+class EOFError(ParseError):
     expected: str
 
     def __post_init__(self) -> None:
@@ -20,7 +24,7 @@ class EOFError(Exception):
 
 
 @dataclass
-class ParseError(Exception):
+class InvalidSyntax(ParseError):
     message: str
     location: Location
 
@@ -29,14 +33,16 @@ class ParseError(Exception):
         self.location.display()
 
     @classmethod
-    def from_unexpected_token(cls, token: Token, expected: str) -> "ParseError":
-        return ParseError(f"Unexpected {token.text!r} (expected {expected})", token.loc)
+    def from_unexpected_token(cls, token: Token, expected: str) -> "InvalidSyntax":
+        return InvalidSyntax(
+            f"Unexpected {token.text!r} (expected {expected})", token.loc
+        )
 
     @classmethod
     def from_disallowed(
         cls, token: Token, dialect: Dialect, feature: str
-    ) -> "ParseError":
-        return ParseError(f"{dialect} does not support {feature}", token.loc)
+    ) -> "InvalidSyntax":
+        return InvalidSyntax(f"{dialect} does not support {feature}", token.loc)
 
     def __str__(self) -> str:
         return f"{self.message}\n{self.location.display().rstrip()}"
@@ -394,24 +400,24 @@ def _parse_statement(p: Parser) -> Statement:
         try:
             parser = _VERB_TO_PARSER[first.text]
         except KeyError:
-            raise ParseError(f"Unexpected {first.text!r}", first.loc)
+            raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
         else:
             statement = parser(p)
         remaining = p.pi.peek()
         if remaining is not None:
-            raise ParseError.from_unexpected_token(remaining, "EOF")
+            raise InvalidSyntax.from_unexpected_token(remaining, "EOF")
         return statement
     # In Redshift, INSERT is a soft keyword, so INSERT wouldn't match the previous expression.
     elif first.typ is TokenType.identifier:
         try:
             parser = _VERB_TO_PARSER[first.text.upper()]
         except KeyError:
-            raise ParseError(f"Unexpected {first.text!r}", first.loc)
+            raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
         else:
             statement = parser(p)
         remaining = p.pi.peek()
         if remaining is not None:
-            raise ParseError.from_unexpected_token(remaining, "EOF")
+            raise InvalidSyntax.from_unexpected_token(remaining, "EOF")
         return statement
     elif first.typ is TokenType.comment:
         p.pi.next()
@@ -420,7 +426,7 @@ def _parse_statement(p: Parser) -> Statement:
         leading_comments = (comment, *statement.leading_comments)
         return replace(statement, leading_comments=leading_comments)
     else:
-        raise ParseError(f"Unexpected {first.text!r}", first.loc)
+        raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
 
 
 def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
@@ -465,7 +471,7 @@ def _parse_order_by_clause(
     kwseq = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
     if kwseq is not None:
         if not allowed:
-            raise ParseError.from_disallowed(
+            raise InvalidSyntax.from_disallowed(
                 kwseq.keywords[0].token, p.dialect, "ORDER BY in this context"
             )
         exprs = _parse_order_by_list(p)
@@ -494,7 +500,7 @@ def _parse_limit_clause(p: Parser, *, allowed: bool = True) -> Optional[LimitCla
     kw = _maybe_consume_keyword(p, "LIMIT")
     if kw is not None:
         if not allowed:
-            raise ParseError.from_disallowed(
+            raise InvalidSyntax.from_disallowed(
                 kw.token, p.dialect, "LIMIT in this context"
             )
         expr = _parse_simple_expression(p)
@@ -508,18 +514,20 @@ def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
         all_kw = _maybe_consume_keyword(p, "ALL")
         if all_kw is not None:
             if not p.dialect.supports_feature(Feature.limit_all):
-                raise ParseError.from_disallowed(all_kw.token, p.dialect, "LIMIT ALL")
+                raise InvalidSyntax.from_disallowed(
+                    all_kw.token, p.dialect, "LIMIT ALL"
+                )
             expr = All(all_kw)
         else:
             expr = _parse_simple_expression(p)
         if _next_is_punctuation(p, ","):
             offset_leaf = _expect_punctuation(p, ",")
             if not p.dialect.supports_feature(Feature.comma_offset):
-                raise ParseError.from_disallowed(
+                raise InvalidSyntax.from_disallowed(
                     offset_leaf.token, p.dialect, "LIMIT offset, row_count"
                 )
             if isinstance(expr, All):
-                raise ParseError.from_disallowed(
+                raise InvalidSyntax.from_disallowed(
                     offset_leaf.token, p.dialect, "ALL combined with offset"
                 )
             offset = expr
@@ -558,7 +566,7 @@ def _parse_using_clause(p: Parser, *, allowed: bool = True) -> Optional[UsingCla
     if kw is None:
         return None
     if not allowed:
-        raise ParseError.from_disallowed(kw.token, p.dialect, "USING")
+        raise InvalidSyntax.from_disallowed(kw.token, p.dialect, "USING")
     tables = []
     while True:
         table = _parse_table_name_with_comma(p)
@@ -575,7 +583,7 @@ def _parse_delete(p: Parser) -> Delete:
     )
     if from_clause is None:
         token = _next_or_else(p, "FROM")
-        raise ParseError.from_unexpected_token(token, "FROM")
+        raise InvalidSyntax.from_unexpected_token(token, "FROM")
     allow_using = p.dialect.supports_feature(Feature.delete_using)
     using_clause = _parse_using_clause(p, allowed=allow_using)
     where_clause = _parse_where_clause(p)
@@ -738,7 +746,7 @@ def _parse_insert(p: Parser) -> Insert:
 def _parse_replace(p: Parser) -> Replace:
     insert = _expect_keyword(p, "REPLACE")
     if not p.dialect.supports_feature(Feature.replace):
-        raise ParseError(f"{p.dialect} does not support REPLACE", insert.token.loc)
+        raise InvalidSyntax(f"{p.dialect} does not support REPLACE", insert.token.loc)
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
     return Replace((), insert, into, values)
@@ -774,7 +782,7 @@ def _parse_with(p: Parser) -> Statement:
         return replace(statement, with_clause=with_clause)
     if token is None:
         raise EOFError("SELECT, UPDATE, or DELETE")
-    raise ParseError.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
+    raise InvalidSyntax.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
 
 
 _VERB_TO_PARSER = {
@@ -790,7 +798,7 @@ _VERB_TO_PARSER = {
 def _parse_identifier(p: Parser) -> Identifier:
     token = _next_or_else(p, "identifier")
     if token.typ is not TokenType.identifier:
-        raise ParseError.from_unexpected_token(token, "identifier")
+        raise InvalidSyntax.from_unexpected_token(token, "identifier")
     return Identifier(token, token.text)
 
 
@@ -949,7 +957,7 @@ def _parse_simple_expression(p: Parser) -> Expression:
         else:
             return StringLiteral(token, text)
     else:
-        raise ParseError.from_unexpected_token(token, "expression")
+        raise InvalidSyntax.from_unexpected_token(token, "expression")
 
 
 def _next_is_punctuation(p: Parser, punctuation: str) -> bool:
@@ -974,7 +982,7 @@ def _maybe_consume_punctuation(p: Parser, punctuation: str) -> Optional[Punctuat
 def _expect_punctuation(p: Parser, punctuation: str) -> Punctuation:
     token = _next_or_else(p, punctuation)
     if token.typ is not TokenType.punctuation or token.text != punctuation:
-        raise ParseError.from_unexpected_token(token, repr(punctuation))
+        raise InvalidSyntax.from_unexpected_token(token, repr(punctuation))
     return Punctuation(token, token.text)
 
 
@@ -1018,7 +1026,7 @@ def _next_is_keyword(p: Parser, keyword: str) -> bool:
 def _expect_keyword(p: Parser, keyword: str) -> Keyword:
     token = _next_or_else(p, keyword)
     if not _token_is_keyword(p, token, keyword):
-        raise ParseError.from_unexpected_token(token, repr(keyword))
+        raise InvalidSyntax.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
 
 
