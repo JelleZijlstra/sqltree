@@ -1,4 +1,5 @@
 import pytest
+
 from sqltree.dialect import Dialect, Vendor
 from sqltree.formatter import format
 from sqltree.parser import ParseError
