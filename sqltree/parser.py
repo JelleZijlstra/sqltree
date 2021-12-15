@@ -1,6 +1,14 @@
 from dataclasses import dataclass, field, replace
-from typing import (Callable, Generic, Iterable, Optional, Sequence, Tuple,
-                    TypeVar, Union)
+from typing import (
+    Callable,
+    Generic,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from sqltree.dialect import Dialect, Feature
 
