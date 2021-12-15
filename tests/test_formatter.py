@@ -115,6 +115,11 @@ def test_select() -> None:
         LIMIT 4
         """
     )
+    assert format("select x from y {limit}") == "SELECT x\nFROM y\n{limit}\n"
+    assert (
+        format("select x from y order by z {limit}")
+        == "SELECT x\nFROM y\nORDER BY z\n{limit}\n"
+    )
 
 
 def test_update() -> None:

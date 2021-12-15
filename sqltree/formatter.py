@@ -387,6 +387,10 @@ class Formatter(Visitor[None]):
     def visit_Placeholder(self, node: p.Placeholder) -> None:
         self.write(node.text)
 
+    def visit_PlaceholderClause(self, node: p.PlaceholderClause) -> None:
+        self.start_new_line()
+        self.visit(node.placeholder)
+
     def visit_IntegerLiteral(self, node: p.IntegerLiteral) -> None:
         self.write(str(node.value))
 

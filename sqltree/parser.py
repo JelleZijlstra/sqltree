@@ -250,6 +250,14 @@ class WithClause(Node):
 
 
 @dataclass
+class PlaceholderClause(Node):
+    placeholder: Placeholder
+
+
+MaybeClause = Union[NodeT, PlaceholderClause, None]
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
@@ -259,12 +267,12 @@ class Select(Statement):
     with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
     select_exprs: Sequence[WithTrailingComma[SelectExpr]]
-    from_clause: Optional[FromClause] = None
-    where: Optional[WhereClause] = None
-    group_by: Optional[GroupByClause] = None
-    having: Optional[HavingClause] = None
-    order_by: Optional[OrderByClause] = None
-    limit: Optional[SelectLimitClause] = None
+    from_clause: MaybeClause[FromClause] = None
+    where: MaybeClause[WhereClause] = None
+    group_by: MaybeClause[GroupByClause] = None
+    having: MaybeClause[HavingClause] = None
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[SelectLimitClause] = None
 
 
 @dataclass
@@ -278,10 +286,10 @@ class Delete(Statement):
     with_clause: Optional[WithClause]
     delete_kw: Keyword = field(compare=False, repr=False)
     from_clause: FromClause
-    using_clause: Optional[UsingClause] = None
-    where: Optional[WhereClause] = None
-    order_by: Optional[OrderByClause] = None
-    limit: Optional[LimitClause] = None
+    using_clause: MaybeClause[UsingClause] = None
+    where: MaybeClause[WhereClause] = None
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[LimitClause] = None
 
 
 @dataclass
@@ -311,9 +319,9 @@ class Update(Statement):
     update_kw: Keyword = field(compare=False, repr=False)
     table: Expression
     set_clause: SetClause
-    where: Optional[WhereClause] = None
-    order_by: Optional[OrderByClause] = None
-    limit: Optional[LimitClause] = None
+    where: MaybeClause[WhereClause] = None
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[LimitClause] = None
 
 
 @dataclass
@@ -370,7 +378,7 @@ class Insert(Statement):
     ignore_kw: Optional[Keyword]
     into: IntoClause
     values: InsertValues
-    odku: Optional[OdkuClause] = None
+    odku: MaybeClause[OdkuClause] = None
 
 
 @dataclass
@@ -420,6 +428,16 @@ def _parse_statement(p: Parser) -> Statement:
         return replace(statement, leading_comments=leading_comments)
     else:
         raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
+
+
+def _parse_maybe_clause(
+    p: Parser, clause_parser: Callable[[Parser], Optional[NodeT]]
+) -> MaybeClause[NodeT]:
+    token = p.pi.peek()
+    if token is not None and token.typ is TokenType.placeholder:
+        p.pi.next()
+        return PlaceholderClause(Placeholder(token, token.text))
+    return clause_parser(p)
 
 
 def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
@@ -533,10 +551,14 @@ def _parse_update(p: Parser) -> Update:
     kw = _expect_keyword(p, "UPDATE")
     table = _parse_table_reference(p)
     set_clause = _parse_set_clause(p)
-    where_clause = _parse_where_clause(p)
+    where_clause = _parse_maybe_clause(p, _parse_where_clause)
     allow_limit = p.dialect.supports_feature(Feature.update_limit)
-    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
-    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
+    if allow_limit:
+        order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+        limit_clause = _parse_maybe_clause(p, _parse_limit_clause)
+    else:
+        order_by_clause = _parse_order_by_clause(p, allowed=False)
+        limit_clause = _parse_limit_clause(p, allowed=False)
     return Update(
         (), None, kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
@@ -572,11 +594,18 @@ def _parse_delete(p: Parser) -> Delete:
         token = _next_or_else(p, "FROM")
         raise InvalidSyntax.from_unexpected_token(token, "FROM")
     allow_using = p.dialect.supports_feature(Feature.delete_using)
-    using_clause = _parse_using_clause(p, allowed=allow_using)
-    where_clause = _parse_where_clause(p)
+    if allow_using:
+        using_clause = _parse_maybe_clause(p, _parse_using_clause)
+    else:
+        using_clause = _parse_using_clause(p, allowed=False)
+    where_clause = _parse_maybe_clause(p, _parse_where_clause)
     allow_limit = p.dialect.supports_feature(Feature.update_limit)
-    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
-    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
+    if allow_limit:
+        order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+        limit_clause = _parse_maybe_clause(p, _parse_limit_clause)
+    else:
+        order_by_clause = _parse_order_by_clause(p, allowed=False)
+        limit_clause = _parse_limit_clause(p, allowed=False)
     return Delete(
         (),
         None,
@@ -597,12 +626,12 @@ def _parse_select(p: Parser) -> Select:
     select = _expect_keyword(p, "SELECT")
     select_exprs = _parse_comma_separated(p, _parse_select_expr)
 
-    from_clause = _parse_from_clause(p)
-    where_clause = _parse_where_clause(p)
-    group_by_clause = _parse_group_by_clause(p)
-    having_clause = _parse_having_clause(p)
-    order_by_clause = _parse_order_by_clause(p)
-    select_limit_clause = _parse_select_limit_clause(p)
+    from_clause = _parse_maybe_clause(p, _parse_from_clause)
+    where_clause = _parse_maybe_clause(p, _parse_where_clause)
+    group_by_clause = _parse_maybe_clause(p, _parse_group_by_clause)
+    having_clause = _parse_maybe_clause(p, _parse_having_clause)
+    order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+    select_limit_clause = _parse_maybe_clause(p, _parse_select_limit_clause)
 
     return Select(
         (),
@@ -713,7 +742,7 @@ def _parse_insert(p: Parser) -> Insert:
         ignore = None
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
-    odku = _parse_odku_clause(p)
+    odku = _parse_maybe_clause(p, _parse_odku_clause)
     return Insert((), insert, ignore, into, values, odku)
 
 
