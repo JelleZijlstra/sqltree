@@ -12,7 +12,7 @@ def test() -> None:
         (),
         None,
         p.Keyword(T, "SELECT"),
-        [p.SelectExpr(p.Star(T), None, None, None)],
+        [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
         p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
     )
 
@@ -24,9 +24,13 @@ def test() -> None:
         None,
         p.Keyword(T, "SELECT"),
         [
-            p.SelectExpr(p.Identifier(T, "a"), None, None, p.Punctuation(T, ",")),
-            p.SelectExpr(
-                p.Identifier(T, "b"), p.Keyword(T, "AS"), p.Identifier(T, "c"), None
+            p.WithTrailingComma(
+                p.SelectExpr(p.Identifier(T, "a"), None, None), p.Punctuation(T, ",")
+            ),
+            p.WithTrailingComma(
+                p.SelectExpr(
+                    p.Identifier(T, "b"), p.Keyword(T, "AS"), p.Identifier(T, "c")
+                )
             ),
         ],
         p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
@@ -73,6 +77,6 @@ def test() -> None:
         (p.Comment(T, "-- comment\n"),),
         None,
         p.Keyword(T, "SELECT"),
-        [p.SelectExpr(p.Star(T), None, None, None)],
+        [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
         p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
     )
