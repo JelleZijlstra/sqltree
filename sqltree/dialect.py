@@ -380,6 +380,7 @@ MYSQL8_NEW_KEYWORDS = {
 }
 # https://prestodb.io/docs/current/language/reserved.html
 PRESTO_KEYWORDS = {
+    "SET",  # not actually a keyword but otherwise we can't parse UPDATE
     "ALTER",
     "AND",
     "AS",
@@ -452,6 +453,7 @@ PRESTO_KEYWORDS = {
 }
 # https://docs.aws.amazon.com/redshift/latest/dg/r_pg_keywords.html
 REDSHIFT_KEYWORDS = {
+    "SET",  # not actually a keyword but otherwise we can't parse UPDATE
     "AES128",
     "AES256",
     "ALL",

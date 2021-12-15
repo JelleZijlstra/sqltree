@@ -3,6 +3,7 @@ from typing import (
     Callable,
     Generic,
     Iterable,
+    NoReturn,
     Optional,
     Sequence,
     Tuple,
@@ -179,9 +180,101 @@ class Comment(Leaf):
 
 
 @dataclass
+class IndexHint(Node):
+    intro_kw: Keyword  # USE/IGNORE_FORCE
+    kind_kw: Keyword  # INDEX/KEY
+    for_kw: Optional[Keyword]
+    for_what: Union[None, Keyword, KeywordSequence]  # JOIN/ORDER BY/GROUP BY
+    left_paren: Punctuation
+    index_list: Sequence[WithTrailingComma[Identifier]]
+    right_paren: Punctuation
+
+
+@dataclass
+class JoinOn(Node):
+    kw: Keyword
+    search_condition: Expression
+
+
+@dataclass
+class JoinUsing(Node):
+    kw: Keyword
+    left_paren: Punctuation
+    join_column_list: Sequence[WithTrailingComma[Identifier]]
+    right_paren: Punctuation
+
+
+JoinSpecification = Union[JoinOn, JoinUsing]
+
+
+@dataclass
+class SimpleJoinedTable(Node):
+    left: "TableReference"
+    inner_cross: Optional[Keyword]
+    join_kw: Keyword
+    right: "TableFactor"
+    join_specification: Optional[JoinSpecification] = None
+
+
+@dataclass
+class LeftRightJoinedTable(Node):
+    left: "TableReference"
+    left_right: Keyword
+    outer_kw: Optional[Keyword]
+    join_kw: Keyword
+    right: "TableReference"
+    join_specification: JoinSpecification
+
+
+@dataclass
+class NaturalJoinedTable(Node):
+    left: "TableReference"
+    natural_kw: Keyword
+    left_right: Optional[Keyword]
+    inner_outer: Optional[Keyword]
+    join_kw: Keyword
+    right: "TableFactor"
+
+
+JoinedTable = Union[SimpleJoinedTable, LeftRightJoinedTable, NaturalJoinedTable]
+
+
+@dataclass
+class SimpleTableFactor(Node):
+    table_name: Identifier
+    as_kw: Optional[Keyword] = None
+    alias: Optional[Identifier] = None
+    index_hint_list: Sequence[WithTrailingComma[IndexHint]] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class SubqueryFactor(Node):
+    lateral_kw: Optional[Keyword]
+    table_subquery: "Subselect"
+    as_kw: Optional[Keyword]
+    alias: Identifier
+    left_paren: Optional[Punctuation]
+    col_list: Sequence[WithTrailingComma[Identifier]]
+    right_paren: Optional[Punctuation]
+
+
+@dataclass
+class TableReferenceList(Node):
+    left_paren: Punctuation
+    references: Sequence[WithTrailingComma["TableReference"]]
+    right_paren: Punctuation
+
+
+TableFactor = Union[SimpleTableFactor, SubqueryFactor, TableReferenceList]
+TableReference = Union[TableFactor, JoinedTable]
+
+
+@dataclass
 class FromClause(Node):
     kw: Optional[Keyword] = field(compare=False, repr=False)
-    table: Expression
+    table: TableReference
 
 
 @dataclass
@@ -322,7 +415,7 @@ class SetClause(Node):
 class Update(Statement):
     with_clause: Optional[WithClause]
     update_kw: Keyword = field(compare=False, repr=False)
-    table: Expression
+    table: TableReference
     set_clause: SetClause
     where: MaybeClause[WhereClause] = None
     order_by: MaybeClause[OrderByClause] = None
@@ -443,6 +536,175 @@ def _parse_maybe_clause(
         p.pi.next()
         return PlaceholderClause(Placeholder(token, token.text))
     return clause_parser(p)
+
+
+def _parse_join_specification(p: Parser) -> Optional[JoinSpecification]:
+    on_kw = _maybe_consume_keyword(p, "ON")
+    if on_kw is not None:
+        expr = _parse_expression(p)
+        return JoinOn(on_kw, expr)
+    using_kw = _maybe_consume_keyword(p, "USING")
+    if using_kw is not None:
+        left_paren = _expect_punctuation(p, "(")
+        jcl = _parse_comma_separated(p, _parse_identifier)
+        right_paren = _expect_punctuation(p, ")")
+        return JoinUsing(using_kw, left_paren, jcl, right_paren)
+    return None
+
+
+def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
+    intro_kws = {"USE", "IGNORE", "FORCE"}
+    kind_kws = {"INDEX", "KEY"}
+    if not any(_next_is_keyword(p, kw) for kw in intro_kws):
+        return None
+    token = p.pi.next()
+    intro_kw = Keyword(token, token.text)
+    if not any(_next_is_keyword(p, kw) for kw in kind_kws):
+        p.pi.wind_back()
+        return None
+    token = p.pi.next()
+    kind_kw = Keyword(token, token.text)
+    for_kw = _maybe_consume_keyword(p, "FOR")
+    if for_kw is not None:
+        for_what = _maybe_consume_keyword(p, "JOIN")
+        if for_what is None:
+            for_what = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
+            if for_what is None:
+                for_what = _maybe_consume_keyword_sequence(p, ["GROUP", "BY"])
+                if for_what is None:
+                    expected = "JOIN, ORDER BY, or GROUP BY"
+                    token = _next_or_else(p, expected)
+                    raise InvalidSyntax.from_unexpected_token(token, expected)
+    else:
+        for_what = None
+    left_paren = _expect_punctuation(p, "(")
+    if _next_is_punctuation(p, ")"):
+        index_list = []
+        right_paren = _expect_punctuation(p, ")")
+        if intro_kw.text != "USE":
+            raise InvalidSyntax(
+                f"Index list must be nonempty for {intro_kw.text} {kind_kw.text}",
+                right_paren.token.loc,
+            )
+    else:
+        index_list = _parse_comma_separated(p, _parse_identifier)
+        right_paren = _expect_punctuation(p, ")")
+    return IndexHint(
+        intro_kw, kind_kw, for_kw, for_what, left_paren, index_list, right_paren
+    )
+
+
+def _parse_subquery_factor(
+    p: Parser, lateral_kw: Optional[Keyword] = None
+) -> SubqueryFactor:
+    subselect = _parse_subselect(p, require_parens=True)
+    as_kw = _maybe_consume_keyword(p, "AS")
+    alias = _parse_identifier(p)
+    left_paren = _maybe_consume_punctuation(p, "(")
+    if left_paren is not None:
+        col_list = _parse_comma_separated(p, _parse_identifier)
+        right_paren = _expect_punctuation(p, ")")
+    else:
+        col_list = ()
+        right_paren = None
+    return SubqueryFactor(
+        lateral_kw, subselect, as_kw, alias, left_paren, col_list, right_paren
+    )
+
+
+def _parse_table_name(p: Parser) -> Identifier:
+    # TODO dotted access
+    return _parse_identifier(p)
+
+
+def _parse_table_factor(p: Parser) -> TableFactor:
+    lateral = _maybe_consume_keyword(p, "LATERAL")
+    if lateral is not None:
+        return _parse_subquery_factor(p, lateral)
+    left_paren = _maybe_consume_punctuation(p, "(")
+    if left_paren is not None:
+        if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+            p.pi.wind_back()
+            return _parse_subquery_factor(p)
+        table_refs = _parse_comma_separated(p, _parse_table_reference)
+        right_paren = _expect_punctuation(p, ")")
+        return TableReferenceList(left_paren, table_refs, right_paren)
+    table_name = _parse_table_name(p)
+    as_kw = _maybe_consume_keyword(p, "AS")
+    alias = _maybe_parse_identifier(p)
+    index_hint_list = _parse_comma_separated_allow_empty(p, _parse_index_hint)
+    return SimpleTableFactor(table_name, as_kw, alias, index_hint_list)
+
+
+JOIN_KEYWORDS = {
+    "INNER",
+    "CROSS",
+    "JOIN",
+    "STRAIGHT_JOIN",
+    "LEFT",
+    "RIGHT",
+    "OUTER",
+    "NATURAL",
+}
+
+
+def _parse_natural_join(p: Parser, left: TableReference) -> NaturalJoinedTable:
+    natural_kw = _expect_keyword(p, "NATURAL")
+    inner_kw = _maybe_consume_keyword(p, "INNER")
+    if inner_kw is not None:
+        inner_outer = inner_kw
+        left_right = None
+    else:
+        left_right = _maybe_consume_keyword(p, "LEFT")
+        if left_right is None:
+            left_right = _maybe_consume_keyword(p, "RIGHT")
+        inner_outer = _maybe_consume_keyword(p, "OUTER")
+    join_kw = _expect_keyword(p, "JOIN")
+    right = _parse_table_factor(p)
+    return NaturalJoinedTable(left, natural_kw, left_right, inner_outer, join_kw, right)
+
+
+def _parse_left_right_join(p: Parser, left: TableReference) -> LeftRightJoinedTable:
+    left_right = _maybe_consume_keyword(p, "LEFT")
+    if left_right is None:
+        left_right = _expect_keyword(p, "RIGHT")
+    outer_kw = _maybe_consume_keyword(p, "OUTER")
+    join_kw = _expect_keyword(p, "JOIN")
+    right = _parse_table_reference(p)
+    join_specification = _parse_join_specification(p)
+    if join_specification is None:
+        _raise_with_expected(p, "ON or USING")
+    return LeftRightJoinedTable(
+        left, left_right, outer_kw, join_kw, right, join_specification
+    )
+
+
+def _parse_simple_join(p: Parser, left: TableReference) -> SimpleJoinedTable:
+    inner_cross = _maybe_consume_keyword(p, "INNER")
+    if inner_cross is None:
+        inner_cross = _maybe_consume_keyword(p, "CROSS")
+    join_kw = _maybe_consume_keyword(p, "STRAIGHT_JOIN")
+    if join_kw is None:
+        join_kw = _expect_keyword(p, "JOIN")
+    elif inner_cross is not None:
+        raise InvalidSyntax(
+            f"Cannot combine {inner_cross.text} with STRAIGHT_JOIN", join_kw.token.loc
+        )
+    right = _parse_table_factor(p)
+    join_specification = _parse_join_specification(p)
+    return SimpleJoinedTable(left, inner_cross, join_kw, right, join_specification)
+
+
+def _parse_table_reference(p: Parser) -> TableReference:
+    ref = _parse_table_factor(p)
+    while any(_next_is_keyword(p, kw) for kw in JOIN_KEYWORDS):
+        if _next_is_keyword(p, "NATURAL"):
+            ref = _parse_natural_join(p, ref)
+        elif _next_is_keyword(p, "LEFT") or _next_is_keyword(p, "RIGHT"):
+            ref = _parse_left_right_join(p, ref)
+        else:
+            ref = _parse_simple_join(p, ref)
+    return ref
 
 
 def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
@@ -672,6 +934,33 @@ def _parse_comma_separated(
     return nodes
 
 
+def _raise_with_expected(p: Parser, expected: str) -> NoReturn:
+    token = p.pi.peek()
+    if token is None:
+        raise EOFError(expected)
+    else:
+        raise InvalidSyntax.from_unexpected_token(token, expected)
+
+
+def _parse_comma_separated_allow_empty(
+    p: Parser, parse_func: Callable[[Parser], Optional[NodeT]]
+) -> Sequence[WithTrailingComma[NodeT]]:
+    nodes = []
+    while True:
+        inner = parse_func(p)
+        if inner is None:
+            if not nodes:
+                return []
+            else:
+                _raise_with_expected(p, "next list element")
+        comma = _maybe_consume_punctuation(p, ",")
+        node = WithTrailingComma(inner, comma)
+        nodes.append(node)
+        if comma is None:
+            break
+    return nodes
+
+
 def _maybe_parse_col_name_list(p: Parser) -> Optional[ColNameList]:
     if _next_is_punctuation(p, "("):
         open_paren = _expect_punctuation(p, "(")
@@ -687,7 +976,7 @@ def _parse_into_clause(p: Parser) -> IntoClause:
         into = _expect_keyword(p, "INTO")
     else:
         into = _maybe_consume_keyword(p, "INTO")
-    table = _parse_table_reference(p)
+    table = _parse_table_name(p)
     col_names = _maybe_parse_col_name_list(p)
     return IntoClause(into, table, col_names)
 
@@ -796,6 +1085,22 @@ _VERB_TO_PARSER = {
 }
 
 
+def _maybe_parse_identifier(p: Parser) -> Optional[Identifier]:
+    token = p.pi.peek()
+    if token is None:
+        return None
+    if token.typ is not TokenType.identifier:
+        if token.typ is TokenType.string:
+            delimiter = p.dialect.get_identifier_delimiter()
+            if token.text[0] == delimiter == token.text[-1]:
+                identifier = token.text[1:-1]
+                p.pi.next()
+                return Identifier(token, identifier)
+        return None
+    p.pi.next()
+    return Identifier(token, token.text)
+
+
 def _parse_identifier(p: Parser) -> Identifier:
     token = _next_or_else(p, "identifier")
     if token.typ is not TokenType.identifier:
@@ -806,11 +1111,6 @@ def _parse_identifier(p: Parser) -> Identifier:
                 return Identifier(token, identifier)
         raise InvalidSyntax.from_unexpected_token(token, "identifier")
     return Identifier(token, token.text)
-
-
-def _parse_table_reference(p: Parser) -> Expression:
-    # TODO support namespace.table
-    return _parse_identifier(p)
 
 
 def _parse_select_expr(p: Parser) -> SelectExpr:

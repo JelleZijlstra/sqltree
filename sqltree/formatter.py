@@ -144,6 +144,23 @@ class Formatter(Visitor[None]):
         finally:
             self.node_stack.pop()
 
+    def maybe_visit(
+        self,
+        node: Optional[p.Node],
+        *,
+        else_write: Optional[str] = None,
+        add_space: bool = False,
+    ) -> None:
+        if node is None:
+            if else_write is not None:
+                self.write(else_write)
+                if add_space:
+                    self.add_space()
+            return None
+        self.visit(node)
+        if add_space:
+            self.add_space()
+
     def parent_isinstance(self, node_cls: Type[p.Node]) -> bool:
         if len(self.node_stack) < 2:
             return False
@@ -186,7 +203,7 @@ class Formatter(Visitor[None]):
     ) -> None:
         with self.override_can_split() as state:
             try:
-                if with_space:
+                if with_space and nodes:
                     self.add_space()
                 for node in nodes:
                     self.visit(node)
@@ -466,6 +483,97 @@ class Formatter(Visitor[None]):
         if node.direction_kw is not None:
             self.add_space()
             self.visit(node.direction_kw)
+
+    def visit_IndexHint(self, node: p.IndexHint) -> None:
+        self.start_new_line()
+        self.visit(node.intro_kw)
+        self.add_space()
+        self.visit(node.kind_kw)
+        if node.for_what is not None:
+            self.add_space()
+            if node.for_kw is not None:
+                self.visit(node.for_kw)
+            else:
+                self.write("FOR")
+            self.add_space()
+            self.visit(node.for_what)
+        self.visit(node.left_paren)
+        self.write_comma_list(node.index_list)
+        self.visit(node.right_paren)
+
+    def visit_JoinOn(self, node: p.JoinOn) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.search_condition)
+
+    def visit_JoinUsing(self, node: p.JoinUsing) -> None:
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.left_paren)
+        self.write_comma_list(node.join_column_list)
+        self.visit(node.right_paren)
+
+    def visit_SimpleJoinedTable(self, node: p.SimpleJoinedTable):
+        self.visit_join(
+            node.left,
+            [node.inner_cross, node.join_kw],
+            node.right,
+            node.join_specification,
+        )
+
+    def visit_LeftRightJoinedTable(self, node: p.LeftRightJoinedTable):
+        self.visit_join(
+            node.left,
+            [node.left_right, node.outer_kw, node.join_kw],
+            node.right,
+            node.join_specification,
+        )
+
+    def visit_NaturalJoinedTable(self, node: p.NaturalJoinedTable):
+        self.visit_join(
+            node.left,
+            [node.natural_kw, node.left_right, node.inner_outer, node.join_kw],
+            node.right,
+        )
+
+    def visit_join(
+        self,
+        left: p.TableReference,
+        kws: Sequence[Optional[p.Keyword]],
+        right: p.TableReference,
+        join_spec: Optional[p.JoinSpecification] = None,
+    ) -> None:
+        self.visit(left)
+        self.add_space()
+        for kw in kws:
+            if kw is not None:
+                self.visit(kw)
+        self.add_space()
+        self.visit(right)
+        self.maybe_visit(join_spec)
+
+    def visit_SimpleTableFactor(self, node: p.SimpleTableFactor) -> None:
+        self.visit(node.table_name)
+        if node.alias is not None:
+            self.add_space()
+            self.maybe_visit(node.as_kw, else_write="AS", add_space=True)
+            self.visit(node.alias)
+        self.write_comma_list(node.index_hint_list)
+
+    def visit_SubQueryFactor(self, node: p.SubqueryFactor) -> None:
+        self.maybe_visit(node.lateral_kw, add_space=True)
+        self.visit(node.table_subquery)
+        self.maybe_visit(node.as_kw, else_write="AS", add_space=True)
+        self.visit(node.alias)
+        if node.col_list:
+            self.maybe_visit(node.left_paren, else_write="(")
+            self.write_comma_list(node.col_list)
+            self.maybe_visit(node.right_paren, else_write=")")
+
+    def visit_TableReferenceList(self, node: p.TableReferenceList) -> None:
+        self.visit(node.left_paren)
+        self.write_comma_list(node.references)
+        self.visit(node.right_paren)
 
 
 def format_tree(
