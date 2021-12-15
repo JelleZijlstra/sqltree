@@ -1,7 +1,7 @@
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Generator, Iterator, List, Optional, Sequence, Tuple
+from typing import Generator, Iterator, List, Optional, Sequence, Tuple, Type
 
 from sqltree.dialect import DEFAULT_DIALECT, Dialect
 
@@ -93,6 +93,10 @@ class Formatter(Visitor[None]):
         if self.indent:
             line.append(" " * self.indent)
 
+    def clear_trailing_space(self) -> None:
+        if self.lines[-1] and self.lines[-1][-1].endswith(" "):
+            self.lines[-1][-1] = self.lines[-1][-1][:-1]
+
     def add_comments(self, comments: Sequence[Token]) -> None:
         if comments:
             self.add_space()
@@ -131,6 +135,11 @@ class Formatter(Visitor[None]):
         finally:
             self.node_stack.pop()
 
+    def parent_isinstance(self, node_cls: Type[p.Node]) -> bool:
+        if len(self.node_stack) < 2:
+            return False
+        return isinstance(self.node_stack[-2], node_cls)
+
     def visit_KeywordSequence(self, node: p.KeywordSequence) -> None:
         # Move all the comments to the end
         with self.skip_comments():
@@ -142,7 +151,7 @@ class Formatter(Visitor[None]):
             self.add_comments(kw.token.comments)
 
     def visit_FromClause(self, node: p.FromClause) -> None:
-        if not isinstance(self.node_stack[-2], p.Delete):
+        if not self.parent_isinstance(p.Delete):
             self.start_new_line()
         if node.kw is None:
             self.write("FROM")
@@ -181,8 +190,7 @@ class Formatter(Visitor[None]):
             for node in nodes:
                 self.start_new_line()
                 self.visit(node)
-                if self.lines[-1] and self.lines[-1][-1].endswith(" "):
-                    self.lines[-1][-1] = self.lines[-1][-1][:-1]
+                self.clear_trailing_space()
         self.start_new_line()
 
     def visit_GroupByClause(self, node: p.GroupByClause) -> None:
@@ -396,11 +404,33 @@ class Formatter(Visitor[None]):
         self.visit(node.right_punc)
 
     def visit_BinOp(self, node: p.BinOp) -> None:
-        self.visit(node.left)
-        self.add_space()
+        precedence = node.get_precedence()
+        if precedence >= p.MIN_BOOLEAN_PRECEDENCE:
+            self.clear_trailing_space()
+            with self.add_indent():
+                self.visit_BinOp_multiline(node)
+        else:
+            self.visit(node.left)
+            self.add_space()
+            self.visit(node.op)
+            self.add_space()
+            self.visit(node.right)
+
+    def visit_BinOp_multiline(self, node: p.BinOp, *, newline: bool = True) -> None:
+        precedence = node.get_precedence()
+        if newline:
+            self.start_new_line()
+        self._maybe_multiline(node.left, precedence)
+        self.start_new_line()
         self.visit(node.op)
         self.add_space()
-        self.visit(node.right)
+        self._maybe_multiline(node.right, precedence)
+
+    def _maybe_multiline(self, node: p.Node, precedence: int) -> None:
+        if isinstance(node, p.BinOp) and node.get_precedence() == precedence:
+            self.visit_BinOp_multiline(node, newline=False)
+        else:
+            self.visit(node)
 
     def visit_SelectExpr(self, node: p.SelectExpr) -> None:
         self.visit(node.expr)

@@ -46,10 +46,16 @@ def test_select() -> None:
     assert (
         format(
             "select max(x) from y where x = some(function, many, args) and y ="
-            " no_args()"
+            " no_args()",
+            indent=8,
         )
-        == "SELECT max(x)\nFROM y\nWHERE x = some(function, many, args) AND y ="
-        " no_args()\n"
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+            x = some(function, many, args)
+            AND y = no_args()
+        """
     )
     assert (
         format(
@@ -62,6 +68,18 @@ def test_select() -> None:
             ccccc,
             dddddd
         FROM x
+        """
+    )
+    assert (
+        format("select max(x) from y where x = 1 and y = 2 and z = 3 limit 4", indent=8)
+        == """
+        SELECT max(x)
+        FROM y
+        WHERE
+            x = 1
+            AND y = 2
+            AND z = 3
+        LIMIT 4
         """
     )
 
