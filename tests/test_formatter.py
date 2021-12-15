@@ -33,7 +33,7 @@ def test_select() -> None:
     )
     assert (
         format("with x as (select x from y) select y from x", Dialect(Vendor.redshift))
-        == "WITH x AS (SELECT x\nFROM y\n)\nSELECT y\nFROM x\n"
+        == "WITH x AS (\n    SELECT x\n    FROM y)\nSELECT y\nFROM x\n"
     )
     select_limit_all = "select y from x limit all"
     assert (
@@ -62,7 +62,7 @@ def test_update() -> None:
         format(
             "with x as (select x from y) update y set x = 3", Dialect(Vendor.redshift)
         )
-        == "WITH x AS (SELECT x\nFROM y\n)\nUPDATE y\nSET x = 3\n"
+        == "WITH x AS (\n    SELECT x\n    FROM y)\nUPDATE y\nSET x = 3\n"
     )
     update_limit = "update y set x = 3 limit 1"
     with pytest.raises(ParseError):
@@ -77,14 +77,22 @@ def test_delete() -> None:
     )
     assert (
         format("with x as (select x from y) delete from y", Dialect(Vendor.redshift))
-        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\n"
+        == "WITH x AS (\n    SELECT x\n    FROM y)\nDELETE FROM y\n"
     )
     assert (
         format(
             "with x as (select x from y) delete from y using z, a where x = 4",
             Dialect(Vendor.redshift),
+            indent=8,
         )
-        == "WITH x AS (SELECT x\nFROM y\n)\nDELETE FROM y\nUSING z, a\nWHERE x = 4\n"
+        == """
+        WITH x AS (
+            SELECT x
+            FROM y)
+        DELETE FROM y
+        USING z, a
+        WHERE x = 4
+        """
     )
 
 
@@ -108,14 +116,22 @@ def test_insert() -> None:
     )
     assert (
         format("insert into x(a) (select x from y)", Dialect(Vendor.redshift))
-        == "INSERT INTO x(a)\n(SELECT x\nFROM y\n)\n"
+        == "INSERT INTO x(a) (\n    SELECT x\n    FROM y)\n"
     )
     assert (
         format(
             "insert into x(a) ( with x as (select z from a) select x from y)",
             Dialect(Vendor.redshift),
+            indent=8,
         )
-        == "INSERT INTO x(a)\n(WITH x AS (SELECT z\nFROM a\n)\nSELECT x\nFROM y\n)\n"
+        == """
+        INSERT INTO x(a) (
+            WITH x AS (
+                SELECT z
+                FROM a)
+            SELECT x
+            FROM y)
+        """
     )
     assert (
         format("insert into x(a) select x from y")

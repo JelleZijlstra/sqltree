@@ -1,7 +1,7 @@
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Generator, List, Optional, Sequence
+from typing import Generator, Iterator, List, Optional, Sequence
 
 from sqltree.dialect import DEFAULT_DIALECT, Dialect
 
@@ -10,21 +10,73 @@ from .sqltree import sqltree
 from .tokenizer import Token
 from .visitor import Transformer, Visitor
 
+DEFAULT_LINE_LENGTH = 88  # like black
+
+
+class LineTooLong(Exception):
+    """Raised internally when a line is about to get too long."""
+
 
 @dataclass
 class Formatter(Visitor[None]):
-    pieces: List[str] = field(default_factory=list)
+    line_length: int = DEFAULT_LINE_LENGTH
+    indent: int = 0
+    lines: List[List[str]] = field(default_factory=list)
     should_skip_comments: bool = False
+    current_line_length: int = 0
+    can_split: bool = False
+    node_stack: List[p.Node] = field(default_factory=list)
+
+    def format(self, tree: p.Node) -> str:
+        self.visit(tree)
+        sql = "".join(piece for line in self.lines for piece in line)
+        if self.indent > 0:
+            return f"\n{sql}\n{' ' * self.indent}"
+        else:
+            return sql + "\n"
+
+    @contextmanager
+    def add_indent(self) -> Iterator[None]:
+        self.indent += 4
+        try:
+            yield
+        finally:
+            self.indent -= 4
+
+    @contextmanager
+    def override_can_split(self) -> Iterator[None]:
+        previous_val = self.can_split
+        self.can_split = True
+        try:
+            yield
+        finally:
+            self.can_split = previous_val
+
+    def write(self, text: str) -> None:
+        if not self.lines:
+            self.start_new_line()
+        self.lines[-1].append(text)
+        self.current_line_length += len(text)
+        if self.can_split and self.current_line_length > self.line_length:
+            raise LineTooLong
 
     def add_space(self) -> None:
-        if self.pieces and not self.pieces[-1].endswith("\n"):
-            self.pieces.append(" ")
+        if self.lines and self.lines[-1] and not self.lines[-1][-1].endswith(" "):
+            self.write(" ")
+
+    def start_new_line(self) -> None:
+        if self.lines and any(not text.isspace() for text in self.lines[-1]):
+            self.lines[-1].append("\n")
+        self.lines.append([])
+        if self.indent:
+            self.write(" " * self.indent)
 
     def add_comments(self, comments: Sequence[Token]) -> None:
         if comments:
             self.add_space()
         for comment in comments:
-            self.pieces.append(comment.text)
+            self.write(comment.text.rstrip("\n"))
+            self.start_new_line()
 
     def add_comments_from_leaf(self, node: p.Leaf) -> None:
         if not self.should_skip_comments:
@@ -45,12 +97,17 @@ class Formatter(Visitor[None]):
             self.should_skip_comments = old_value
 
     def visit(self, node: p.Node) -> None:
-        if isinstance(node, p.Statement):
-            for comment in node.leading_comments:
-                self.pieces.append(comment.text)
-        super().visit(node)
-        if isinstance(node, p.Leaf):
-            self.add_comments_from_leaf(node)
+        self.node_stack.append(node)
+        try:
+            if isinstance(node, p.Statement):
+                for comment in node.leading_comments:
+                    self.write(comment.text.rstrip("\n"))
+                    self.start_new_line()
+            super().visit(node)
+            if isinstance(node, p.Leaf):
+                self.add_comments_from_leaf(node)
+        finally:
+            self.node_stack.pop()
 
     def visit_KeywordSequence(self, node: p.KeywordSequence) -> None:
         # Move all the comments to the end
@@ -63,56 +120,56 @@ class Formatter(Visitor[None]):
             self.add_comments(kw.token.comments)
 
     def visit_FromClause(self, node: p.FromClause) -> None:
+        if not isinstance(self.node_stack[-2], p.Delete):
+            self.start_new_line()
         if node.kw is None:
-            self.pieces.append("FROM")
+            self.write("FROM")
         else:
             self.visit(node.kw)
         self.add_space()
         self.visit(node.table)
-        self.pieces.append("\n")
 
     def visit_WhereClause(self, node: p.WhereClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         self.visit(node.conditions)
-        self.pieces.append("\n")
 
     def visit_HavingClause(self, node: p.HavingClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         self.visit(node.conditions)
-        self.pieces.append("\n")
 
     def visit_GroupByClause(self, node: p.GroupByClause) -> None:
+        self.start_new_line()
         self.visit(node.kwseq)
         self.add_space()
         for expr in node.expr:
             self.visit(expr)
-        self.pieces.append("\n")
 
     def visit_OrderByClause(self, node: p.OrderByClause) -> None:
+        self.start_new_line()
         self.visit(node.kwseq)
         self.add_space()
         for expr in node.expr:
             self.visit(expr)
-        self.pieces.append("\n")
 
     def visit_SetClause(self, node: p.SetClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         for assignment in node.assignments:
             self.visit(assignment)
-        self.pieces.append("\n")
 
     def visit_IntoClause(self, node: p.IntoClause) -> None:
         if node.kw is not None:
             self.visit(node.kw)
         else:
-            self.pieces.append("INTO")
+            self.write("INTO")
         self.add_space()
         self.visit(node.table)
         self.maybe_visit(node.col_names)
-        self.pieces.append("\n")
 
     def visit_ColNameList(self, node: p.ColNameList) -> None:
         self.visit(node.open_paren)
@@ -124,26 +181,26 @@ class Formatter(Visitor[None]):
         if node.left_paren is None:
             self.visit(node.select)
         else:
-            # TODO improve this formatting
             self.visit(node.left_paren)
-            self.visit(node.select)
+            with self.add_indent():
+                self.visit(node.select)
             assert node.right_paren is not None, "both parens must be set"
             self.visit(node.right_paren)
 
     def visit_ValuesClause(self, node: p.ValuesClause) -> None:
+        self.start_new_line()
         if node.kw.text == "VALUES":
             self.visit(node.kw)
         else:
-            self.pieces.append("VALUES")
+            self.write("VALUES")
             self.add_comments_from_leaf(node.kw)
         self.add_space()
         for value_list in node.value_lists:
             self.visit(value_list)
-        self.pieces.append("\n")
 
     def visit_DefaultValues(self, node: p.DefaultValues) -> None:
+        self.start_new_line()
         self.visit(node.kwseq)
-        self.pieces.append("\n")
 
     def visit_ValueList(self, node: p.ValueList) -> None:
         self.visit(node.open_paren)
@@ -152,11 +209,11 @@ class Formatter(Visitor[None]):
         self.visit(node.close_paren)
 
     def visit_OdkuClause(self, node: p.OdkuClause) -> None:
+        self.start_new_line()
         self.visit(node.kwseq)
         self.add_space()
         for assignment in node.assignments:
             self.visit(assignment)
-        self.pieces.append("\n")
 
     def visit_Assignment(self, node: p.Assignment) -> None:
         self.visit(node.col_name)
@@ -172,23 +229,23 @@ class Formatter(Visitor[None]):
         self.visit(node.kw)
 
     def visit_LimitClause(self, node: p.LimitClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         self.visit(node.row_count)
-        self.pieces.append("\n")
 
     def visit_SelectLimitClause(self, node: p.SelectLimitClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         self.visit(node.row_count)
         if node.offset is not None:
             self.add_space()
-            self.pieces.append("OFFSET")
+            self.write("OFFSET")
             if node.offset_leaf is not None:
                 self.add_comments_from_leaf(node.offset_leaf)
             self.add_space()
             self.visit(node.offset)
-        self.pieces.append("\n")
 
     def visit_CommonTableExpression(self, node: p.CommonTableExpression) -> None:
         self.visit(node.table_name)
@@ -201,6 +258,7 @@ class Formatter(Visitor[None]):
         self.visit(node.subquery)
 
     def visit_WithClause(self, node: p.WithClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         if node.recursive_kw is not None:
@@ -208,22 +266,21 @@ class Formatter(Visitor[None]):
             self.add_space()
         for cte in node.ctes:
             self.visit(cte)
-        self.pieces.append("\n")
 
     def visit_UsingClause(self, node: p.UsingClause) -> None:
+        self.start_new_line()
         self.visit(node.kw)
         self.add_space()
         for table in node.tables:
             self.visit(table)
-        self.pieces.append("\n")
 
     def visit_Select(self, node: p.Select) -> None:
         self.maybe_visit(node.with_clause)
+        self.start_new_line()
         self.visit(node.select_kw)
         self.add_space()
         for expr in node.select_exprs:
             self.visit(expr)
-        self.pieces.append("\n")
 
         self.maybe_visit(node.from_clause)
         self.maybe_visit(node.where)
@@ -234,6 +291,7 @@ class Formatter(Visitor[None]):
 
     def visit_Delete(self, node: p.Delete) -> None:
         self.maybe_visit(node.with_clause)
+        self.start_new_line()
         self.visit(node.delete_kw)
         self.add_space()
         self.visit(node.from_clause)
@@ -244,21 +302,22 @@ class Formatter(Visitor[None]):
 
     def visit_Update(self, node: p.Update) -> None:
         self.maybe_visit(node.with_clause)
+        self.start_new_line()
         self.visit(node.update_kw)
         self.add_space()
         self.visit(node.table)
-        self.pieces.append("\n")
         self.visit(node.set_clause)
         self.maybe_visit(node.where)
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
 
     def _visit_insert_values(self, node: p.InsertValues) -> None:
-        self.visit(node)
         if isinstance(node, p.Subselect) and node.left_paren is not None:
-            self.pieces.append("\n")
+            self.add_space()
+        self.visit(node)
 
     def visit_Insert(self, node: p.Insert) -> None:
+        self.start_new_line()
         self.visit(node.insert_kw)
         self.add_space()
         if node.ignore_kw is not None:
@@ -269,31 +328,32 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.odku)
 
     def visit_Replace(self, node: p.Replace) -> None:
+        self.start_new_line()
         self.visit(node.replace_kw)
         self.add_space()
         self.visit(node.into)
         self._visit_insert_values(node.values)
 
     def visit_Keyword(self, node: p.Keyword) -> None:
-        self.pieces.append(node.text.upper())
+        self.write(node.text.upper())
 
     def visit_Punctuation(self, node: p.Punctuation) -> None:
-        self.pieces.append(node.text)
+        self.write(node.text)
 
     def visit_Identifier(self, node: p.Identifier) -> None:
-        self.pieces.append(node.text)
+        self.write(node.text)
 
     def visit_Placeholder(self, node: p.Placeholder) -> None:
-        self.pieces.append(node.text)
+        self.write(node.text)
 
     def visit_IntegerLiteral(self, node: p.IntegerLiteral) -> None:
-        self.pieces.append(str(node.value))
+        self.write(str(node.value))
 
     def visit_StringLiteral(self, node: p.StringLiteral) -> None:
-        self.pieces.append(f'"{node.value}"')
+        self.write(f'"{node.value}"')
 
     def visit_Star(self, node: p.Star) -> None:
-        self.pieces.append("*")
+        self.write("*")
 
     def visit_WithTrailingComma(self, node: p.WithTrailingComma) -> None:
         self.visit(node.node)
@@ -333,14 +393,20 @@ class Formatter(Visitor[None]):
             self.visit(node.direction_kw)
 
 
-def format_tree(tree: p.Node) -> str:
-    fmt = Formatter()
-    fmt.visit(tree)
-    return "".join(fmt.pieces)
+def format_tree(
+    tree: p.Node, *, line_length: int = DEFAULT_LINE_LENGTH, indent: int = 0
+) -> str:
+    return Formatter(line_length=line_length, indent=indent).format(tree)
 
 
-def format(sql: str, dialect: Dialect = DEFAULT_DIALECT) -> str:
-    return format_tree(sqltree(sql, dialect))
+def format(
+    sql: str,
+    dialect: Dialect = DEFAULT_DIALECT,
+    *,
+    line_length: int = DEFAULT_LINE_LENGTH,
+    indent: int = 0,
+) -> str:
+    return format_tree(sqltree(sql, dialect), line_length=line_length, indent=indent)
 
 
 def transform_and_format(sql: str, transformer: Transformer) -> str:
