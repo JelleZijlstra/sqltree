@@ -3,9 +3,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Generator, Iterator, List, Optional, Sequence, Tuple, Type
 
-from .dialect import DEFAULT_DIALECT, Dialect
-
 from . import parser as p
+from .dialect import DEFAULT_DIALECT, Dialect
 from .sqltree import sqltree
 from .tokenizer import Token
 from .visitor import Transformer, Visitor
