@@ -913,6 +913,19 @@ def _parse_binop(p: Parser, precedence: int) -> Expression:
             return left
 
 
+# Keywords that support function-like syntax
+KEYWORD_FUNCTIONS = {"VALUES"}
+
+
+def _parse_function_call(p: Parser, callee: Expression) -> FunctionCall:
+    left_paren = _expect_punctuation(p, "(")
+    args = []
+    if not _next_is_punctuation(p, ")"):
+        args = _parse_comma_separated(p, _parse_expression)
+    right_paren = _expect_punctuation(p, ")")
+    return FunctionCall(callee, left_paren, args, right_paren)
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation and token.text == "*":
@@ -923,18 +936,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
         return Parenthesized(Punctuation(token, "("), inner, right)
     elif token.typ is TokenType.identifier:
         expr = Identifier(token, token.text)
-        left_paren = _maybe_consume_punctuation(p, "(")
-        if left_paren:
-            args = []
-            if not _next_is_punctuation(p, ")"):
-                while True:
-                    arg = _parse_expression(p)
-                    comma = _maybe_consume_punctuation(p, ",")
-                    args.append(WithTrailingComma(arg, comma))
-                    if comma is None:
-                        break
-            right_paren = _expect_punctuation(p, ")")
-            return FunctionCall(expr, left_paren, args, right_paren)
+        if _next_is_punctuation(p, "("):
+            return _parse_function_call(p, expr)
         return expr
     elif token.typ is TokenType.number:
         return IntegerLiteral(token, int(token.text))
@@ -946,6 +949,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
             return Identifier(token, text)
         else:
             return StringLiteral(token, text)
+    elif token.typ is TokenType.keyword and token.text in KEYWORD_FUNCTIONS:
+        return _parse_function_call(p, Identifier(token, token.text))
     else:
         raise InvalidSyntax.from_unexpected_token(token, "expression")
 

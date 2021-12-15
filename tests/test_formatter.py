@@ -206,6 +206,16 @@ def test_insert() -> None:
         format("insert into x(a) select x from y")
         == "INSERT INTO x(a)\nSELECT x\nFROM y\n"
     )
+    assert (
+        format(
+            "insert into x(a) values(1) on duplicate key update a = values(a)", indent=8
+        )
+        == """
+        INSERT INTO x(a)
+        VALUES (1)
+        ON DUPLICATE KEY UPDATE a = VALUES(a)
+        """
+    )
 
 
 def test_replace() -> None:
