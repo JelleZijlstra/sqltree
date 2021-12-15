@@ -1,5 +1,5 @@
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Optional, Set, Tuple, Union
 
 Version = Optional[Tuple[int, ...]]
@@ -24,6 +24,8 @@ class Feature(enum.Enum):
     require_from_for_delete = 8  # if False, allow omittinng FROM in DELETE FROM
     update_limit = 9  # ORDER BY and LIMIT on DELETE and UPDATE
     delete_using = 10  # USING in DELETE
+    comma_offset = 11  # LIMIT offset, row_count
+    limit_all = 12  # LIMIT ALL
 
 
 @dataclass
@@ -31,7 +33,9 @@ class Dialect:
     vendor: Vendor
     # If omitted, we assume the most recent version
     version: Version = None
-    _keywords: Optional[Set[str]] = None
+    _keywords: Optional[Set[str]] = field(
+        compare=False, repr=False, hash=False, init=False, default=None
+    )
 
     def __str__(self) -> str:
         name = self.vendor.name
@@ -96,6 +100,8 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
     Feature.require_from_for_delete: {Vendor.mysql: True, Vendor.redshift: False},
     Feature.update_limit: {Vendor.mysql: True, Vendor.redshift: False},
     Feature.delete_using: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.comma_offset: {Vendor.mysql: True, Vendor.redshift: False},
+    Feature.limit_all: {Vendor.mysql: False, Vendor.redshift: True},
 }
 _missing_features = set(Feature) - set(_FEATURES)
 assert not _missing_features, f"missing settings for {_missing_features}"
