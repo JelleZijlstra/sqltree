@@ -51,6 +51,19 @@ def test_select() -> None:
         == "SELECT max(x)\nFROM y\nWHERE x = some(function, many, args) AND y ="
         " no_args()\n"
     )
+    assert (
+        format(
+            "select aaaaaa, bbbbbbbb, ccccc, dddddd from x", line_length=20, indent=8
+        )
+        == """
+        SELECT
+            aaaaaa,
+            bbbbbbbb,
+            ccccc,
+            dddddd
+        FROM x
+        """
+    )
 
 
 def test_update() -> None:

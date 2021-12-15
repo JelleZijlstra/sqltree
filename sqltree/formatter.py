@@ -1,7 +1,7 @@
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Generator, Iterator, List, Optional, Sequence
+from typing import Generator, Iterator, List, Optional, Sequence, Tuple
 
 from sqltree.dialect import DEFAULT_DIALECT, Dialect
 
@@ -17,6 +17,9 @@ class LineTooLong(Exception):
     """Raised internally when a line is about to get too long."""
 
 
+State = Tuple[int, int, int]
+
+
 @dataclass
 class Formatter(Visitor[None]):
     line_length: int = DEFAULT_LINE_LENGTH
@@ -25,6 +28,7 @@ class Formatter(Visitor[None]):
     should_skip_comments: bool = False
     current_line_length: int = 0
     can_split: bool = False
+    line_has_content: bool = False
     node_stack: List[p.Node] = field(default_factory=list)
 
     def format(self, tree: p.Node) -> str:
@@ -44,18 +48,31 @@ class Formatter(Visitor[None]):
             self.indent -= 4
 
     @contextmanager
-    def override_can_split(self) -> Iterator[None]:
+    def override_can_split(self) -> Iterator[State]:
         previous_val = self.can_split
         self.can_split = True
         try:
-            yield
+            yield self.get_state()
         finally:
             self.can_split = previous_val
+
+    def get_state(self) -> State:
+        num_pieces = len(self.lines[-1]) if self.lines else 0
+        return (len(self.lines), num_pieces, self.current_line_length)
+
+    def restore_state(self, state: State) -> None:
+        num_lines, num_pieces, current_line_length = state
+        del self.lines[num_lines:]
+        if num_lines > 0:
+            del self.lines[-1][num_pieces:]
+        self.current_line_length = current_line_length
+        assert self.get_state() == state
 
     def write(self, text: str) -> None:
         if not self.lines:
             self.start_new_line()
         self.lines[-1].append(text)
+        self.line_has_content = True
         self.current_line_length += len(text)
         if self.can_split and self.current_line_length > self.line_length:
             raise LineTooLong
@@ -65,11 +82,16 @@ class Formatter(Visitor[None]):
             self.write(" ")
 
     def start_new_line(self) -> None:
+        if self.lines and not self.line_has_content:
+            return
         if self.lines and any(not text.isspace() for text in self.lines[-1]):
             self.lines[-1].append("\n")
-        self.lines.append([])
+        self.current_line_length = self.indent
+        self.line_has_content = False
+        line = []
+        self.lines.append(line)
         if self.indent:
-            self.write(" " * self.indent)
+            line.append(" " * self.indent)
 
     def add_comments(self, comments: Sequence[Token]) -> None:
         if comments:
@@ -144,10 +166,24 @@ class Formatter(Visitor[None]):
     def write_comma_list(
         self, nodes: Sequence[p.WithTrailingComma[p.Node]], with_space: bool = True
     ) -> None:
-        if with_space:
-            self.add_space()
-        for node in nodes:
-            self.visit(node)
+        with self.override_can_split() as state:
+            try:
+                if with_space:
+                    self.add_space()
+                for node in nodes:
+                    self.visit(node)
+            except LineTooLong:
+                pass
+            else:
+                return
+        self.restore_state(state)
+        with self.add_indent():
+            for node in nodes:
+                self.start_new_line()
+                self.visit(node)
+                if self.lines[-1] and self.lines[-1][-1].endswith(" "):
+                    self.lines[-1][-1] = self.lines[-1][-1][:-1]
+        self.start_new_line()
 
     def visit_GroupByClause(self, node: p.GroupByClause) -> None:
         self.start_new_line()
