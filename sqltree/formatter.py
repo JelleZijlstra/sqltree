@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Generator, Iterator, List, Optional, Sequence, Tuple, Type
 
-from sqltree.dialect import DEFAULT_DIALECT, Dialect
+from .dialect import DEFAULT_DIALECT, Dialect
 
 from . import parser as p
 from .sqltree import sqltree
@@ -22,6 +22,7 @@ State = Tuple[int, int, int]
 
 @dataclass
 class Formatter(Visitor[None]):
+    dialect: Dialect
     line_length: int = DEFAULT_LINE_LENGTH
     indent: int = 0
     lines: List[List[str]] = field(default_factory=list)
@@ -381,8 +382,15 @@ class Formatter(Visitor[None]):
     def visit_Punctuation(self, node: p.Punctuation) -> None:
         self.write(node.text)
 
+    def visit_KeywordIdentifier(self, node: p.KeywordIdentifier) -> None:
+        self.visit(node.keyword)
+
     def visit_Identifier(self, node: p.Identifier) -> None:
-        self.write(node.text)
+        if node.text.upper() in self.dialect.get_keywords():
+            delimiter = self.dialect.get_identifier_delimiter()
+            self.write(f"{delimiter}{node.text}{delimiter}")
+        else:
+            self.write(node.text)
 
     def visit_Placeholder(self, node: p.Placeholder) -> None:
         self.write(node.text)
@@ -461,9 +469,13 @@ class Formatter(Visitor[None]):
 
 
 def format_tree(
-    tree: p.Node, *, line_length: int = DEFAULT_LINE_LENGTH, indent: int = 0
+    tree: p.Node,
+    *,
+    dialect: Dialect = DEFAULT_DIALECT,
+    line_length: int = DEFAULT_LINE_LENGTH,
+    indent: int = 0,
 ) -> str:
-    return Formatter(line_length=line_length, indent=indent).format(tree)
+    return Formatter(dialect, line_length=line_length, indent=indent).format(tree)
 
 
 def format(
@@ -473,7 +485,9 @@ def format(
     line_length: int = DEFAULT_LINE_LENGTH,
     indent: int = 0,
 ) -> str:
-    return format_tree(sqltree(sql, dialect), line_length=line_length, indent=indent)
+    return format_tree(
+        sqltree(sql, dialect), dialect=dialect, line_length=line_length, indent=indent
+    )
 
 
 def transform_and_format(sql: str, transformer: Transformer) -> str:

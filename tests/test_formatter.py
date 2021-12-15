@@ -120,6 +120,14 @@ def test_select() -> None:
         format("select x from y order by z {limit}")
         == "SELECT x\nFROM y\nORDER BY z\n{limit}\n"
     )
+    assert (
+        format("select x from `y` where `select` = 3")
+        == "SELECT x\nFROM y\nWHERE `select` = 3\n"
+    )
+    assert (
+        format('select x from "y" where "select" = 3', Dialect(Vendor.redshift))
+        == 'SELECT x\nFROM y\nWHERE "select" = 3\n'
+    )
 
 
 def test_update() -> None:

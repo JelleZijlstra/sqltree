@@ -108,6 +108,11 @@ class Identifier(Expression, Leaf):
 
 
 @dataclass
+class KeywordIdentifier(Expression):
+    keyword: Keyword
+
+
+@dataclass
 class StringLiteral(Expression, Leaf):
     value: str
 
@@ -794,6 +799,11 @@ _VERB_TO_PARSER = {
 def _parse_identifier(p: Parser) -> Identifier:
     token = _next_or_else(p, "identifier")
     if token.typ is not TokenType.identifier:
+        if token.typ is TokenType.string:
+            delimiter = p.dialect.get_identifier_delimiter()
+            if token.text[0] == delimiter == token.text[-1]:
+                identifier = token.text[1:-1]
+                return Identifier(token, identifier)
         raise InvalidSyntax.from_unexpected_token(token, "identifier")
     return Identifier(token, token.text)
 
@@ -950,7 +960,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
         else:
             return StringLiteral(token, text)
     elif token.typ is TokenType.keyword and token.text in KEYWORD_FUNCTIONS:
-        return _parse_function_call(p, Identifier(token, token.text))
+        kw = Keyword(token, token.text)
+        return _parse_function_call(p, KeywordIdentifier(kw))
     else:
         raise InvalidSyntax.from_unexpected_token(token, "expression")
 
