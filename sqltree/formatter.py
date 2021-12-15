@@ -114,10 +114,6 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.col_names)
         self.pieces.append("\n")
 
-    def visit_ColName(self, node: p.ColName) -> None:
-        self.visit(node.col_name)
-        self.visit_trailing_comma(node.trailing_comma)
-
     def visit_ColNameList(self, node: p.ColNameList) -> None:
         self.visit(node.open_paren)
         for col_name in node.col_names:
@@ -154,11 +150,6 @@ class Formatter(Visitor[None]):
         for value in node.values:
             self.visit(value)
         self.visit(node.close_paren)
-        self.visit_trailing_comma(node.trailing_comma)
-
-    def visit_ValueWithComma(self, node: p.ValueWithComma) -> None:
-        self.visit(node.value)
-        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_OdkuClause(self, node: p.OdkuClause) -> None:
         self.visit(node.kwseq)
@@ -173,7 +164,6 @@ class Formatter(Visitor[None]):
         self.visit(node.eq_punc)
         self.add_space()
         self.visit(node.value)
-        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_Default(self, node: p.Default) -> None:
         self.visit(node.kw)
@@ -209,7 +199,6 @@ class Formatter(Visitor[None]):
         self.visit(node.as_kw)
         self.add_space()
         self.visit(node.subquery)
-        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_WithClause(self, node: p.WithClause) -> None:
         self.visit(node.kw)
@@ -220,10 +209,6 @@ class Formatter(Visitor[None]):
         for cte in node.ctes:
             self.visit(cte)
         self.pieces.append("\n")
-
-    def visit_TableNameWithComma(self, node: p.TableNameWithComma) -> None:
-        self.visit(node.table_name)
-        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_UsingClause(self, node: p.UsingClause) -> None:
         self.visit(node.kw)
@@ -310,8 +295,8 @@ class Formatter(Visitor[None]):
     def visit_Star(self, node: p.Star) -> None:
         self.pieces.append("*")
 
-    def visit_ExpressionWithComma(self, node: p.ExpressionWithComma) -> None:
-        self.visit(node.expression)
+    def visit_WithTrailingComma(self, node: p.WithTrailingComma) -> None:
+        self.visit(node.node)
         self.visit_trailing_comma(node.trailing_comma)
 
     def visit_FunctionCall(self, node: p.FunctionCall) -> None:
@@ -340,14 +325,12 @@ class Formatter(Visitor[None]):
             self.visit(node.as_kw)
             self.add_space()
             self.visit(node.alias)
-        self.visit_trailing_comma(node.trailing_comma)
 
     def visit_OrderByExpr(self, node: p.OrderByExpr) -> None:
         self.visit(node.expr)
         if node.direction_kw is not None:
             self.add_space()
             self.visit(node.direction_kw)
-        self.visit_trailing_comma(node.trailing_comma)
 
 
 def format_tree(tree: p.Node) -> str:

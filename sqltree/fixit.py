@@ -4,9 +4,7 @@ Fixit rule for formatting SQL.
 
 
 import libcst as cst
-from fixit import CstLintRule
-from fixit import InvalidTestCase as Invalid
-from fixit import ValidTestCase as Valid
+from fixit import CstLintRule, InvalidTestCase as Invalid, ValidTestCase as Valid
 from libcst.helpers import get_full_name_for_node
 
 from sqltree.parser import ParseError

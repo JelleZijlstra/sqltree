@@ -21,3 +21,7 @@ experimental-string-processing = true
 
 [project.requires-extra]
 fixit = ["fixit"]
+
+[tool.isort]
+profile = "black"
+combine_as_imports = true

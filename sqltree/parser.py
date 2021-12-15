@@ -1,5 +1,14 @@
 from dataclasses import dataclass, field, replace
-from typing import Iterable, Optional, Sequence, Tuple, Union
+from typing import (
+    Callable,
+    Generic,
+    Iterable,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from sqltree.dialect import Dialect, Feature
 
@@ -59,6 +68,9 @@ class Node:
     pass
 
 
+NodeT = TypeVar("NodeT", bound=Node)
+
+
 @dataclass
 class Leaf(Node):
     token: Token = field(repr=False, compare=False)
@@ -77,6 +89,12 @@ class KeywordSequence(Node):
 @dataclass
 class Punctuation(Leaf):
     text: str
+
+
+@dataclass
+class WithTrailingComma(Node, Generic[NodeT]):
+    node: NodeT
+    trailing_comma: Optional[Punctuation] = None
 
 
 @dataclass
@@ -105,16 +123,10 @@ class Placeholder(Expression, Leaf):
 
 
 @dataclass
-class ExpressionWithComma(Node):
-    expression: Expression
-    trailing_comma: Optional[Punctuation] = None
-
-
-@dataclass
 class FunctionCall(Expression):
     callee: Expression
     left_paren: Punctuation
-    args: Sequence[ExpressionWithComma]
+    args: Sequence[WithTrailingComma[Expression]]
     right_paren: Punctuation
 
 
@@ -142,7 +154,6 @@ class SelectExpr(Node):
     expr: Expression
     as_kw: Optional[Keyword] = field(compare=False, repr=False)
     alias: Optional[Identifier]
-    trailing_comma: Optional[Punctuation] = field(compare=False, repr=False)
 
 
 @dataclass
@@ -151,7 +162,6 @@ class OrderByExpr(Node):
 
     expr: Expression
     direction_kw: Optional[Keyword] = field(compare=False, repr=False)
-    trailing_comma: Optional[Punctuation] = field(compare=False, repr=False)
 
 
 @dataclass
@@ -174,7 +184,7 @@ class WhereClause(Node):
 @dataclass
 class GroupByClause(Node):
     kwseq: KeywordSequence = field(compare=False, repr=False)
-    expr: Sequence[OrderByExpr]
+    expr: Sequence[WithTrailingComma[OrderByExpr]]
 
 
 @dataclass
@@ -186,7 +196,7 @@ class HavingClause(Node):
 @dataclass
 class OrderByClause(Node):
     kwseq: KeywordSequence = field(compare=False, repr=False)
-    expr: Sequence[OrderByExpr]
+    expr: Sequence[WithTrailingComma[OrderByExpr]]
 
 
 @dataclass
@@ -226,14 +236,13 @@ class CommonTableExpression(Node):
     col_names: Optional["ColNameList"]
     as_kw: Keyword = field(compare=False, repr=False)
     subquery: "Subselect"
-    trailing_comma: Optional[Punctuation] = None
 
 
 @dataclass
 class WithClause(Node):
     kw: Keyword = field(compare=False, repr=False)
     recursive_kw: Optional[Keyword]
-    ctes: Sequence[CommonTableExpression]
+    ctes: Sequence[WithTrailingComma[CommonTableExpression]]
 
 
 @dataclass
@@ -245,7 +254,7 @@ class Statement(Node):
 class Select(Statement):
     with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
-    select_exprs: Sequence[SelectExpr]
+    select_exprs: Sequence[WithTrailingComma[SelectExpr]]
     from_clause: Optional[FromClause] = None
     where: Optional[WhereClause] = None
     group_by: Optional[GroupByClause] = None
@@ -255,15 +264,9 @@ class Select(Statement):
 
 
 @dataclass
-class TableNameWithComma(Node):
-    table_name: Identifier
-    trailing_comma: Optional[Punctuation] = None
-
-
-@dataclass
 class UsingClause(Node):
     kw: Keyword = field(compare=False, repr=False)
-    tables: Sequence[TableNameWithComma]
+    tables: Sequence[WithTrailingComma[Identifier]]
 
 
 @dataclass
@@ -290,13 +293,12 @@ class Assignment(Node):
     col_name: Identifier
     eq_punc: Punctuation
     value: Value
-    trailing_comma: Optional[Punctuation] = None
 
 
 @dataclass
 class SetClause(Node):
     kw: Keyword = field(compare=False, repr=False)
-    assignments: Sequence[Assignment]
+    assignments: Sequence[WithTrailingComma[Assignment]]
 
 
 @dataclass
@@ -311,15 +313,9 @@ class Update(Statement):
 
 
 @dataclass
-class ColName(Node):
-    col_name: Identifier
-    trailing_comma: Optional[Punctuation] = None
-
-
-@dataclass
 class ColNameList(Node):
     open_paren: Punctuation
-    col_names: Sequence[ColName]
+    col_names: Sequence[WithTrailingComma[Identifier]]
     close_paren: Punctuation
 
 
@@ -331,23 +327,16 @@ class IntoClause(Node):
 
 
 @dataclass
-class ValueWithComma(Node):
-    value: Value
-    trailing_comma: Optional[Punctuation] = None
-
-
-@dataclass
 class ValueList(Node):
     open_paren: Punctuation
-    values: Sequence[ValueWithComma]
+    values: Sequence[WithTrailingComma[Value]]
     close_paren: Punctuation
-    trailing_comma: Optional[Punctuation] = None
 
 
 @dataclass
 class ValuesClause(Node):
     kw: Keyword = field(compare=False, repr=False)
-    value_lists: Sequence[ValueList]
+    value_lists: Sequence[WithTrailingComma[ValueList]]
 
 
 @dataclass
@@ -368,7 +357,7 @@ InsertValues = Union[ValuesClause, DefaultValues, Subselect]
 @dataclass
 class OdkuClause(Node):
     kwseq: KeywordSequence
-    assignments: Sequence[Assignment]
+    assignments: Sequence[WithTrailingComma[Assignment]]
 
 
 @dataclass
@@ -480,14 +469,8 @@ def _parse_order_by_clause(
         return None
 
 
-def _parse_assignment_list(p: Parser) -> Sequence[Assignment]:
-    assignments = []
-    while True:
-        expr = _parse_assignment(p)
-        assignments.append(expr)
-        if expr.trailing_comma is None:
-            break
-    return assignments
+def _parse_assignment_list(p: Parser) -> Sequence[WithTrailingComma[Assignment]]:
+    return _parse_comma_separated(p, _parse_assignment)
 
 
 def _parse_set_clause(p: Parser) -> SetClause:
@@ -555,10 +538,10 @@ def _parse_update(p: Parser) -> Update:
     )
 
 
-def _parse_table_name_with_comma(p: Parser) -> TableNameWithComma:
+def _parse_table_name_with_comma(p: Parser) -> WithTrailingComma:
     name = _parse_identifier(p)
     comma = _maybe_consume_punctuation(p, ",")
-    return TableNameWithComma(name, comma)
+    return WithTrailingComma(name, comma)
 
 
 def _parse_using_clause(p: Parser, *, allowed: bool = True) -> Optional[UsingClause]:
@@ -608,12 +591,7 @@ def _parse_select(p: Parser) -> Select:
     else:
         with_clause = None
     select = _expect_keyword(p, "SELECT")
-    select_exprs = []
-    while True:
-        expr = _parse_select_expr(p)
-        select_exprs.append(expr)
-        if expr.trailing_comma is None:
-            break
+    select_exprs = _parse_comma_separated(p, _parse_select_expr)
 
     from_clause = _parse_from_clause(p)
     where_clause = _parse_where_clause(p)
@@ -636,21 +614,30 @@ def _parse_select(p: Parser) -> Select:
     )
 
 
-def _parse_col_name(p: Parser) -> ColName:
-    name = _parse_identifier(p)
+def _parse_with_trailing_comma(
+    p: Parser, parse_func: Callable[[Parser], NodeT]
+) -> WithTrailingComma[NodeT]:
+    name = parse_func(p)
     comma = _maybe_consume_punctuation(p, ",")
-    return ColName(name, comma)
+    return WithTrailingComma(name, comma)
+
+
+def _parse_comma_separated(
+    p: Parser, parse_func: Callable[[Parser], NodeT]
+) -> Sequence[WithTrailingComma[NodeT]]:
+    nodes = []
+    while True:
+        node = _parse_with_trailing_comma(p, parse_func)
+        nodes.append(node)
+        if node.trailing_comma is None:
+            break
+    return nodes
 
 
 def _maybe_parse_col_name_list(p: Parser) -> Optional[ColNameList]:
     if _next_is_punctuation(p, "("):
         open_paren = _expect_punctuation(p, "(")
-        col_names = []
-        while True:
-            col_name = _parse_col_name(p)
-            col_names.append(col_name)
-            if col_name.trailing_comma is None:
-                break
+        col_names = _parse_comma_separated(p, _parse_identifier)
         close_paren = _expect_punctuation(p, ")")
         return ColNameList(open_paren, col_names, close_paren)
     else:
@@ -667,23 +654,11 @@ def _parse_into_clause(p: Parser) -> IntoClause:
     return IntoClause(into, table, col_names)
 
 
-def _parse_value_with_comma(p: Parser) -> ValueWithComma:
-    val = _parse_value(p)
-    comma = _maybe_consume_punctuation(p, ",")
-    return ValueWithComma(val, comma)
-
-
 def _parse_value_list(p: Parser) -> ValueList:
     open_paren = _expect_punctuation(p, "(")
-    values = []
-    while True:
-        value = _parse_value_with_comma(p)
-        values.append(value)
-        if value.trailing_comma is None:
-            break
+    values = _parse_comma_separated(p, _parse_value)
     close_paren = _expect_punctuation(p, ")")
-    comma = _maybe_consume_punctuation(p, ",")
-    return ValueList(open_paren, values, close_paren, comma)
+    return ValueList(open_paren, values, close_paren)
 
 
 def _parse_subselect(p: Parser, require_parens: bool) -> Subselect:
@@ -714,12 +689,7 @@ def _parse_values_clause(p: Parser) -> InsertValues:
                     Feature.insert_select_require_parens
                 ),
             )
-    value_lists = []
-    while True:
-        value_list = _parse_value_list(p)
-        value_lists.append(value_list)
-        if value_list.trailing_comma is None:
-            break
+    value_lists = _parse_comma_separated(p, _parse_value_list)
     return ValuesClause(kw, value_lists)
 
 
@@ -757,20 +727,13 @@ def _parse_cte(p: Parser) -> CommonTableExpression:
     col_names = _maybe_parse_col_name_list(p)
     as_kw = _expect_keyword(p, "AS")
     subquery = _parse_subselect(p, require_parens=True)
-    trailing_comma = _maybe_consume_punctuation(p, ",")
-    return CommonTableExpression(name, col_names, as_kw, subquery, trailing_comma)
+    return CommonTableExpression(name, col_names, as_kw, subquery)
 
 
 def _parse_with_clause(p: Parser) -> WithClause:
     kw = _expect_keyword(p, "WITH")
     recursive_kw = _maybe_consume_keyword(p, "RECURSIVE")
-    ctes = []
-    while True:
-        expr = _parse_cte(p)
-        ctes.append(expr)
-        if expr.trailing_comma is None:
-            break
-
+    ctes = _parse_comma_separated(p, _parse_cte)
     return WithClause(kw, recursive_kw, ctes)
 
 
@@ -809,13 +772,11 @@ def _parse_table_reference(p: Parser) -> Expression:
 
 def _parse_select_expr(p: Parser) -> SelectExpr:
     expr = _parse_expression(p)
-    alias = trailing_comma = None
+    alias = None
     as_kw = _maybe_consume_keyword(p, "AS")
     if as_kw is not None:
         alias = _parse_identifier(p)
-    if _next_is_punctuation(p, ","):
-        trailing_comma = _expect_punctuation(p, ",")
-    return SelectExpr(expr, as_kw, alias, trailing_comma)
+    return SelectExpr(expr, as_kw, alias)
 
 
 def _parse_value(p: Parser) -> Value:
@@ -830,20 +791,11 @@ def _parse_assignment(p: Parser) -> Assignment:
     colname = _parse_identifier(p)
     punc = _expect_punctuation(p, "=")
     value = _parse_value(p)
-    if _next_is_punctuation(p, ","):
-        trailing_comma = _expect_punctuation(p, ",")
-    else:
-        trailing_comma = None
-    return Assignment(colname, punc, value, trailing_comma)
+    return Assignment(colname, punc, value)
 
 
-def _parse_order_by_list(p: Parser) -> Sequence[OrderByExpr]:
-    exprs = []
-    while True:
-        expr = _parse_order_by_expr(p)
-        exprs.append(expr)
-        if expr.trailing_comma is None:
-            return exprs
+def _parse_order_by_list(p: Parser) -> Sequence[WithTrailingComma[OrderByExpr]]:
+    return _parse_comma_separated(p, _parse_order_by_expr)
 
 
 def _parse_order_by_expr(p: Parser) -> OrderByExpr:
@@ -851,8 +803,7 @@ def _parse_order_by_expr(p: Parser) -> OrderByExpr:
     direction = _maybe_consume_keyword(p, "ASC")
     if direction is None:
         direction = _maybe_consume_keyword(p, "DESC")
-    trailing_comma = _maybe_consume_punctuation(p, ",")
-    return OrderByExpr(expr, direction, trailing_comma)
+    return OrderByExpr(expr, direction)
 
 
 def K(text: str) -> Tuple[TokenType, str]:
@@ -940,7 +891,7 @@ def _parse_simple_expression(p: Parser) -> Expression:
                 while True:
                     arg = _parse_expression(p)
                     comma = _maybe_consume_punctuation(p, ",")
-                    args.append(ExpressionWithComma(arg, comma))
+                    args.append(WithTrailingComma(arg, comma))
                     if comma is None:
                         break
             right_paren = _expect_punctuation(p, ")")
