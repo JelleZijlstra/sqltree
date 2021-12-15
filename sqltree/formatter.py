@@ -3,9 +3,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Generator, Iterator, List, Optional, Sequence, Tuple, Type
 
-from sqltree.dialect import DEFAULT_DIALECT, Dialect
-
 from . import parser as p
+from .dialect import DEFAULT_DIALECT, Dialect
 from .sqltree import sqltree
 from .tokenizer import Token
 from .visitor import Transformer, Visitor
@@ -22,6 +21,7 @@ State = Tuple[int, int, int]
 
 @dataclass
 class Formatter(Visitor[None]):
+    dialect: Dialect
     line_length: int = DEFAULT_LINE_LENGTH
     indent: int = 0
     lines: List[List[str]] = field(default_factory=list)
@@ -143,6 +143,23 @@ class Formatter(Visitor[None]):
         finally:
             self.node_stack.pop()
 
+    def maybe_visit(
+        self,
+        node: Optional[p.Node],
+        *,
+        else_write: Optional[str] = None,
+        add_space: bool = False,
+    ) -> None:
+        if node is None:
+            if else_write is not None:
+                self.write(else_write)
+                if add_space:
+                    self.add_space()
+            return None
+        self.visit(node)
+        if add_space:
+            self.add_space()
+
     def parent_isinstance(self, node_cls: Type[p.Node]) -> bool:
         if len(self.node_stack) < 2:
             return False
@@ -165,8 +182,7 @@ class Formatter(Visitor[None]):
             self.write("FROM")
         else:
             self.visit(node.kw)
-        self.add_space()
-        self.visit(node.table)
+        self.write_comma_list(node.table)
 
     def visit_WhereClause(self, node: p.WhereClause) -> None:
         self.start_new_line()
@@ -185,7 +201,7 @@ class Formatter(Visitor[None]):
     ) -> None:
         with self.override_can_split() as state:
             try:
-                if with_space:
+                if with_space and nodes:
                     self.add_space()
                 for node in nodes:
                     self.visit(node)
@@ -381,11 +397,22 @@ class Formatter(Visitor[None]):
     def visit_Punctuation(self, node: p.Punctuation) -> None:
         self.write(node.text)
 
+    def visit_KeywordIdentifier(self, node: p.KeywordIdentifier) -> None:
+        self.visit(node.keyword)
+
     def visit_Identifier(self, node: p.Identifier) -> None:
-        self.write(node.text)
+        if node.text.upper() in self.dialect.get_keywords():
+            delimiter = self.dialect.get_identifier_delimiter()
+            self.write(f"{delimiter}{node.text}{delimiter}")
+        else:
+            self.write(node.text)
 
     def visit_Placeholder(self, node: p.Placeholder) -> None:
         self.write(node.text)
+
+    def visit_PlaceholderClause(self, node: p.PlaceholderClause) -> None:
+        self.start_new_line()
+        self.visit(node.placeholder)
 
     def visit_IntegerLiteral(self, node: p.IntegerLiteral) -> None:
         self.write(str(node.value))
@@ -455,11 +482,112 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(node.direction_kw)
 
+    def visit_IndexHint(self, node: p.IndexHint) -> None:
+        self.start_new_line()
+        self.visit(node.intro_kw)
+        self.add_space()
+        self.visit(node.kind_kw)
+        if node.for_what is not None:
+            self.add_space()
+            if node.for_kw is not None:
+                self.visit(node.for_kw)
+            else:
+                self.write("FOR")
+            self.add_space()
+            self.visit(node.for_what)
+        self.visit(node.left_paren)
+        self.write_comma_list(node.index_list, with_space=False)
+        self.visit(node.right_paren)
+
+    def visit_JoinOn(self, node: p.JoinOn) -> None:
+        self.start_new_line()
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.search_condition)
+
+    def visit_JoinUsing(self, node: p.JoinUsing) -> None:
+        self.start_new_line()
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.left_paren)
+        self.write_comma_list(node.join_column_list)
+        self.visit(node.right_paren)
+
+    def visit_SimpleJoinedTable(self, node: p.SimpleJoinedTable):
+        self.visit_join(node)
+
+    def visit_LeftRightJoinedTable(self, node: p.LeftRightJoinedTable):
+        self.visit_join(node)
+
+    def visit_NaturalJoinedTable(self, node: p.NaturalJoinedTable):
+        self.visit_join(node)
+
+    def visit_join(self, node: p.JoinedTable, *, skip_indent: bool = False) -> None:
+        if isinstance(node, (p.SimpleJoinedTable, p.LeftRightJoinedTable)):
+            join_spec = node.join_specification
+        else:
+            join_spec = None
+        if isinstance(node, p.SimpleJoinedTable):
+            kws = [node.inner_cross, node.join_kw]
+        elif isinstance(node, p.LeftRightJoinedTable):
+            kws = [node.left_right, node.outer_kw, node.join_kw]
+        else:
+            kws = [node.natural_kw, node.left_right, node.inner_outer, node.join_kw]
+        if isinstance(
+            node.left,
+            (p.SimpleJoinedTable, p.LeftRightJoinedTable, p.NaturalJoinedTable),
+        ):
+            self.visit(node.left)
+        else:
+            self.clear_trailing_space()
+            with self.add_indent():
+                self.start_new_line()
+                self.visit(node.left)
+        self.start_new_line()
+        for kw in kws:
+            if kw is not None:
+                self.visit(kw)
+        with self.add_indent():
+            self.start_new_line()
+            self.visit(node.right)
+        self.maybe_visit(join_spec)
+
+    def visit_SimpleTableFactor(self, node: p.SimpleTableFactor) -> None:
+        self.visit(node.table_name)
+        if node.alias is not None:
+            self.add_space()
+            self.maybe_visit(node.as_kw, else_write="AS", add_space=True)
+            self.visit(node.alias)
+        for index_hint in node.index_hint_list:
+            self.start_new_line()
+            self.visit(index_hint.node)
+            if index_hint.trailing_comma is not None:
+                self.visit(index_hint.trailing_comma)
+
+    def visit_SubQueryFactor(self, node: p.SubqueryFactor) -> None:
+        self.maybe_visit(node.lateral_kw, add_space=True)
+        self.visit(node.table_subquery)
+        self.maybe_visit(node.as_kw, else_write="AS", add_space=True)
+        self.visit(node.alias)
+        if node.col_list:
+            self.maybe_visit(node.left_paren, else_write="(")
+            self.write_comma_list(node.col_list)
+            self.maybe_visit(node.right_paren, else_write=")")
+
+    def visit_TableReferenceList(self, node: p.TableReferenceList) -> None:
+        self.visit(node.left_paren)
+        self.write_comma_list(node.references, with_space=False)
+        self.visit(node.right_paren)
+
 
 def format_tree(
-    tree: p.Node, *, line_length: int = DEFAULT_LINE_LENGTH, indent: int = 0
+    tree: p.Node,
+    *,
+    dialect: Dialect = DEFAULT_DIALECT,
+    line_length: int = DEFAULT_LINE_LENGTH,
+    indent: int = 0,
 ) -> str:
-    return Formatter(line_length=line_length, indent=indent).format(tree)
+    return Formatter(dialect, line_length=line_length, indent=indent).format(tree)
 
 
 def format(
@@ -469,7 +597,9 @@ def format(
     line_length: int = DEFAULT_LINE_LENGTH,
     indent: int = 0,
 ) -> str:
-    return format_tree(sqltree(sql, dialect), line_length=line_length, indent=indent)
+    return format_tree(
+        sqltree(sql, dialect), dialect=dialect, line_length=line_length, indent=indent
+    )
 
 
 def transform_and_format(sql: str, transformer: Transformer) -> str:

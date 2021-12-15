@@ -13,7 +13,10 @@ def test() -> None:
         None,
         p.Keyword(T, "SELECT"),
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
-        p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
+        p.FromClause(
+            p.Keyword(T, "FROM"),
+            [p.WithTrailingComma(p.SimpleTableFactor(p.Identifier(T, "a")))],
+        ),
     )
 
     tree = sqltree(
@@ -33,7 +36,10 @@ def test() -> None:
                 )
             ),
         ],
-        p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
+        p.FromClause(
+            p.Keyword(T, "FROM"),
+            [p.WithTrailingComma(p.SimpleTableFactor(p.Identifier(T, "a")))],
+        ),
         p.WhereClause(
             p.Keyword(T, "WHERE"),
             p.BinOp(
@@ -78,5 +84,8 @@ def test() -> None:
         None,
         p.Keyword(T, "SELECT"),
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
-        p.FromClause(p.Keyword(T, "FROM"), p.Identifier(T, "a")),
+        p.FromClause(
+            p.Keyword(T, "FROM"),
+            [p.WithTrailingComma(p.SimpleTableFactor(p.Identifier(T, "a")))],
+        ),
     )

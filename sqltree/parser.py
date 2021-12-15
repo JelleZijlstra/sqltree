@@ -3,6 +3,7 @@ from typing import (
     Callable,
     Generic,
     Iterable,
+    NoReturn,
     Optional,
     Sequence,
     Tuple,
@@ -108,6 +109,11 @@ class Identifier(Expression, Leaf):
 
 
 @dataclass
+class KeywordIdentifier(Expression):
+    keyword: Keyword
+
+
+@dataclass
 class StringLiteral(Expression, Leaf):
     value: str
 
@@ -174,9 +180,102 @@ class Comment(Leaf):
 
 
 @dataclass
+class IndexHint(Node):
+    intro_kw: Keyword  # USE/IGNORE_FORCE
+    kind_kw: Keyword  # INDEX/KEY
+    for_kw: Optional[Keyword]
+    for_what: Union[None, Keyword, KeywordSequence]  # JOIN/ORDER BY/GROUP BY
+    left_paren: Punctuation
+    index_list: Sequence[WithTrailingComma[Identifier]]
+    right_paren: Punctuation
+
+
+@dataclass
+class JoinOn(Node):
+    kw: Keyword
+    search_condition: Expression
+
+
+@dataclass
+class JoinUsing(Node):
+    kw: Keyword
+    left_paren: Punctuation
+    join_column_list: Sequence[WithTrailingComma[Identifier]]
+    right_paren: Punctuation
+
+
+JoinSpecification = Union[JoinOn, JoinUsing]
+
+
+@dataclass
+class SimpleJoinedTable(Node):
+    left: "TableReference"
+    inner_cross: Optional[Keyword]
+    join_kw: Keyword
+    right: "TableFactor"
+    join_specification: Optional[JoinSpecification] = None
+
+
+@dataclass
+class LeftRightJoinedTable(Node):
+    left: "TableReference"
+    left_right: Keyword
+    outer_kw: Optional[Keyword]
+    join_kw: Keyword
+    right: "TableReference"
+    join_specification: JoinSpecification
+
+
+@dataclass
+class NaturalJoinedTable(Node):
+    left: "TableReference"
+    natural_kw: Keyword
+    left_right: Optional[Keyword]
+    inner_outer: Optional[Keyword]
+    join_kw: Keyword
+    right: "TableFactor"
+
+
+JoinedTable = Union[SimpleJoinedTable, LeftRightJoinedTable, NaturalJoinedTable]
+
+
+@dataclass
+class SimpleTableFactor(Node):
+    table_name: Identifier
+    as_kw: Optional[Keyword] = None
+    alias: Optional[Identifier] = None
+    index_hint_list: Sequence[WithTrailingComma[IndexHint]] = field(
+        default_factory=list
+    )
+
+
+@dataclass
+class SubqueryFactor(Node):
+    lateral_kw: Optional[Keyword]
+    table_subquery: "Subselect"
+    as_kw: Optional[Keyword]
+    alias: Identifier
+    left_paren: Optional[Punctuation]
+    col_list: Sequence[WithTrailingComma[Identifier]]
+    right_paren: Optional[Punctuation]
+
+
+@dataclass
+class TableReferenceList(Node):
+    left_paren: Punctuation
+    references: "TableReferences"
+    right_paren: Punctuation
+
+
+TableFactor = Union[SimpleTableFactor, SubqueryFactor, TableReferenceList]
+TableReference = Union[TableFactor, JoinedTable]
+TableReferences = Sequence[WithTrailingComma[TableReference]]
+
+
+@dataclass
 class FromClause(Node):
     kw: Optional[Keyword] = field(compare=False, repr=False)
-    table: Expression
+    table: TableReferences
 
 
 @dataclass
@@ -250,6 +349,14 @@ class WithClause(Node):
 
 
 @dataclass
+class PlaceholderClause(Node):
+    placeholder: Placeholder
+
+
+MaybeClause = Union[NodeT, PlaceholderClause, None]
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
@@ -259,12 +366,12 @@ class Select(Statement):
     with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
     select_exprs: Sequence[WithTrailingComma[SelectExpr]]
-    from_clause: Optional[FromClause] = None
-    where: Optional[WhereClause] = None
-    group_by: Optional[GroupByClause] = None
-    having: Optional[HavingClause] = None
-    order_by: Optional[OrderByClause] = None
-    limit: Optional[SelectLimitClause] = None
+    from_clause: MaybeClause[FromClause] = None
+    where: MaybeClause[WhereClause] = None
+    group_by: MaybeClause[GroupByClause] = None
+    having: MaybeClause[HavingClause] = None
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[SelectLimitClause] = None
 
 
 @dataclass
@@ -278,10 +385,10 @@ class Delete(Statement):
     with_clause: Optional[WithClause]
     delete_kw: Keyword = field(compare=False, repr=False)
     from_clause: FromClause
-    using_clause: Optional[UsingClause] = None
-    where: Optional[WhereClause] = None
-    order_by: Optional[OrderByClause] = None
-    limit: Optional[LimitClause] = None
+    using_clause: MaybeClause[UsingClause] = None
+    where: MaybeClause[WhereClause] = None
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[LimitClause] = None
 
 
 @dataclass
@@ -309,11 +416,11 @@ class SetClause(Node):
 class Update(Statement):
     with_clause: Optional[WithClause]
     update_kw: Keyword = field(compare=False, repr=False)
-    table: Expression
+    table: TableReference
     set_clause: SetClause
-    where: Optional[WhereClause] = None
-    order_by: Optional[OrderByClause] = None
-    limit: Optional[LimitClause] = None
+    where: MaybeClause[WhereClause] = None
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[LimitClause] = None
 
 
 @dataclass
@@ -370,7 +477,7 @@ class Insert(Statement):
     ignore_kw: Optional[Keyword]
     into: IntoClause
     values: InsertValues
-    odku: Optional[OdkuClause] = None
+    odku: MaybeClause[OdkuClause] = None
 
 
 @dataclass
@@ -422,13 +529,196 @@ def _parse_statement(p: Parser) -> Statement:
         raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
 
 
+def _parse_maybe_clause(
+    p: Parser, clause_parser: Callable[[Parser], Optional[NodeT]]
+) -> MaybeClause[NodeT]:
+    token = p.pi.peek()
+    if token is not None and token.typ is TokenType.placeholder:
+        p.pi.next()
+        return PlaceholderClause(Placeholder(token, token.text))
+    return clause_parser(p)
+
+
+def _parse_join_specification(p: Parser) -> Optional[JoinSpecification]:
+    on_kw = _maybe_consume_keyword(p, "ON")
+    if on_kw is not None:
+        expr = _parse_expression(p)
+        return JoinOn(on_kw, expr)
+    using_kw = _maybe_consume_keyword(p, "USING")
+    if using_kw is not None:
+        left_paren = _expect_punctuation(p, "(")
+        jcl = _parse_comma_separated(p, _parse_identifier)
+        right_paren = _expect_punctuation(p, ")")
+        return JoinUsing(using_kw, left_paren, jcl, right_paren)
+    return None
+
+
+def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
+    intro_kws = {"USE", "IGNORE", "FORCE"}
+    kind_kws = {"INDEX", "KEY"}
+    if not any(_next_is_keyword(p, kw) for kw in intro_kws):
+        return None
+    token = p.pi.next()
+    intro_kw = Keyword(token, token.text)
+    if not any(_next_is_keyword(p, kw) for kw in kind_kws):
+        p.pi.wind_back()
+        return None
+    token = p.pi.next()
+    kind_kw = Keyword(token, token.text)
+    for_kw = _maybe_consume_keyword(p, "FOR")
+    if for_kw is not None:
+        for_what = _maybe_consume_keyword(p, "JOIN")
+        if for_what is None:
+            for_what = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
+            if for_what is None:
+                for_what = _maybe_consume_keyword_sequence(p, ["GROUP", "BY"])
+                if for_what is None:
+                    expected = "JOIN, ORDER BY, or GROUP BY"
+                    token = _next_or_else(p, expected)
+                    raise InvalidSyntax.from_unexpected_token(token, expected)
+    else:
+        for_what = None
+    left_paren = _expect_punctuation(p, "(")
+    if _next_is_punctuation(p, ")"):
+        index_list = []
+        right_paren = _expect_punctuation(p, ")")
+        if intro_kw.text != "USE":
+            raise InvalidSyntax(
+                f"Index list must be nonempty for {intro_kw.text} {kind_kw.text}",
+                right_paren.token.loc,
+            )
+    else:
+        index_list = _parse_comma_separated(p, _parse_identifier)
+        right_paren = _expect_punctuation(p, ")")
+    return IndexHint(
+        intro_kw, kind_kw, for_kw, for_what, left_paren, index_list, right_paren
+    )
+
+
+def _parse_subquery_factor(
+    p: Parser, lateral_kw: Optional[Keyword] = None
+) -> SubqueryFactor:
+    subselect = _parse_subselect(p, require_parens=True)
+    as_kw = _maybe_consume_keyword(p, "AS")
+    alias = _parse_identifier(p)
+    left_paren = _maybe_consume_punctuation(p, "(")
+    if left_paren is not None:
+        col_list = _parse_comma_separated(p, _parse_identifier)
+        right_paren = _expect_punctuation(p, ")")
+    else:
+        col_list = ()
+        right_paren = None
+    return SubqueryFactor(
+        lateral_kw, subselect, as_kw, alias, left_paren, col_list, right_paren
+    )
+
+
+def _parse_table_name(p: Parser) -> Identifier:
+    # TODO dotted access
+    return _parse_identifier(p)
+
+
+def _parse_table_factor(p: Parser) -> TableFactor:
+    lateral = _maybe_consume_keyword(p, "LATERAL")
+    if lateral is not None:
+        return _parse_subquery_factor(p, lateral)
+    left_paren = _maybe_consume_punctuation(p, "(")
+    if left_paren is not None:
+        if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+            p.pi.wind_back()
+            return _parse_subquery_factor(p)
+        table_refs = _parse_comma_separated(p, _parse_table_reference)
+        right_paren = _expect_punctuation(p, ")")
+        return TableReferenceList(left_paren, table_refs, right_paren)
+    table_name = _parse_table_name(p)
+    as_kw = _maybe_consume_keyword(p, "AS")
+    alias = _maybe_parse_identifier(p)
+    index_hint_list = _parse_comma_separated_allow_empty(p, _parse_index_hint)
+    return SimpleTableFactor(table_name, as_kw, alias, index_hint_list)
+
+
+JOIN_KEYWORDS = {
+    "INNER",
+    "CROSS",
+    "JOIN",
+    "STRAIGHT_JOIN",
+    "LEFT",
+    "RIGHT",
+    "OUTER",
+    "NATURAL",
+}
+
+
+def _parse_natural_join(p: Parser, left: TableReference) -> NaturalJoinedTable:
+    natural_kw = _expect_keyword(p, "NATURAL")
+    inner_kw = _maybe_consume_keyword(p, "INNER")
+    if inner_kw is not None:
+        inner_outer = inner_kw
+        left_right = None
+    else:
+        left_right = _maybe_consume_keyword(p, "LEFT")
+        if left_right is None:
+            left_right = _maybe_consume_keyword(p, "RIGHT")
+        inner_outer = _maybe_consume_keyword(p, "OUTER")
+    join_kw = _expect_keyword(p, "JOIN")
+    right = _parse_table_factor(p)
+    return NaturalJoinedTable(left, natural_kw, left_right, inner_outer, join_kw, right)
+
+
+def _parse_left_right_join(p: Parser, left: TableReference) -> LeftRightJoinedTable:
+    left_right = _maybe_consume_keyword(p, "LEFT")
+    if left_right is None:
+        left_right = _expect_keyword(p, "RIGHT")
+    outer_kw = _maybe_consume_keyword(p, "OUTER")
+    join_kw = _expect_keyword(p, "JOIN")
+    right = _parse_table_reference(p)
+    join_specification = _parse_join_specification(p)
+    if join_specification is None:
+        _raise_with_expected(p, "ON or USING")
+    return LeftRightJoinedTable(
+        left, left_right, outer_kw, join_kw, right, join_specification
+    )
+
+
+def _parse_simple_join(p: Parser, left: TableReference) -> SimpleJoinedTable:
+    inner_cross = _maybe_consume_keyword(p, "INNER")
+    if inner_cross is None:
+        inner_cross = _maybe_consume_keyword(p, "CROSS")
+    join_kw = _maybe_consume_keyword(p, "STRAIGHT_JOIN")
+    if join_kw is None:
+        join_kw = _expect_keyword(p, "JOIN")
+    elif inner_cross is not None:
+        raise InvalidSyntax(
+            f"Cannot combine {inner_cross.text} with STRAIGHT_JOIN", join_kw.token.loc
+        )
+    right = _parse_table_factor(p)
+    join_specification = _parse_join_specification(p)
+    return SimpleJoinedTable(left, inner_cross, join_kw, right, join_specification)
+
+
+def _parse_table_reference(p: Parser) -> TableReference:
+    ref = _parse_table_factor(p)
+    while any(_next_is_keyword(p, kw) for kw in JOIN_KEYWORDS):
+        if _next_is_keyword(p, "NATURAL"):
+            ref = _parse_natural_join(p, ref)
+        elif _next_is_keyword(p, "LEFT") or _next_is_keyword(p, "RIGHT"):
+            ref = _parse_left_right_join(p, ref)
+        else:
+            ref = _parse_simple_join(p, ref)
+    return ref
+
+
+def _parse_table_references(p: Parser) -> TableReferences:
+    return _parse_comma_separated(p, _parse_table_reference)
+
+
 def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
     from_kw = _maybe_consume_keyword(p, "FROM")
     if from_kw is not None:
-        table = _parse_table_reference(p)
+        table = _parse_table_references(p)
         return FromClause(from_kw, table)
     if not require_from:
-        table = _parse_table_reference(p)
+        table = _parse_table_references(p)
         return FromClause(None, table)
     return None
 
@@ -533,10 +823,14 @@ def _parse_update(p: Parser) -> Update:
     kw = _expect_keyword(p, "UPDATE")
     table = _parse_table_reference(p)
     set_clause = _parse_set_clause(p)
-    where_clause = _parse_where_clause(p)
+    where_clause = _parse_maybe_clause(p, _parse_where_clause)
     allow_limit = p.dialect.supports_feature(Feature.update_limit)
-    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
-    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
+    if allow_limit:
+        order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+        limit_clause = _parse_maybe_clause(p, _parse_limit_clause)
+    else:
+        order_by_clause = _parse_order_by_clause(p, allowed=False)
+        limit_clause = _parse_limit_clause(p, allowed=False)
     return Update(
         (), None, kw, table, set_clause, where_clause, order_by_clause, limit_clause
     )
@@ -572,11 +866,18 @@ def _parse_delete(p: Parser) -> Delete:
         token = _next_or_else(p, "FROM")
         raise InvalidSyntax.from_unexpected_token(token, "FROM")
     allow_using = p.dialect.supports_feature(Feature.delete_using)
-    using_clause = _parse_using_clause(p, allowed=allow_using)
-    where_clause = _parse_where_clause(p)
+    if allow_using:
+        using_clause = _parse_maybe_clause(p, _parse_using_clause)
+    else:
+        using_clause = _parse_using_clause(p, allowed=False)
+    where_clause = _parse_maybe_clause(p, _parse_where_clause)
     allow_limit = p.dialect.supports_feature(Feature.update_limit)
-    order_by_clause = _parse_order_by_clause(p, allowed=allow_limit)
-    limit_clause = _parse_limit_clause(p, allowed=allow_limit)
+    if allow_limit:
+        order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+        limit_clause = _parse_maybe_clause(p, _parse_limit_clause)
+    else:
+        order_by_clause = _parse_order_by_clause(p, allowed=False)
+        limit_clause = _parse_limit_clause(p, allowed=False)
     return Delete(
         (),
         None,
@@ -597,12 +898,12 @@ def _parse_select(p: Parser) -> Select:
     select = _expect_keyword(p, "SELECT")
     select_exprs = _parse_comma_separated(p, _parse_select_expr)
 
-    from_clause = _parse_from_clause(p)
-    where_clause = _parse_where_clause(p)
-    group_by_clause = _parse_group_by_clause(p)
-    having_clause = _parse_having_clause(p)
-    order_by_clause = _parse_order_by_clause(p)
-    select_limit_clause = _parse_select_limit_clause(p)
+    from_clause = _parse_maybe_clause(p, _parse_from_clause)
+    where_clause = _parse_maybe_clause(p, _parse_where_clause)
+    group_by_clause = _parse_maybe_clause(p, _parse_group_by_clause)
+    having_clause = _parse_maybe_clause(p, _parse_having_clause)
+    order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+    select_limit_clause = _parse_maybe_clause(p, _parse_select_limit_clause)
 
     return Select(
         (),
@@ -638,6 +939,33 @@ def _parse_comma_separated(
     return nodes
 
 
+def _raise_with_expected(p: Parser, expected: str) -> NoReturn:
+    token = p.pi.peek()
+    if token is None:
+        raise EOFError(expected)
+    else:
+        raise InvalidSyntax.from_unexpected_token(token, expected)
+
+
+def _parse_comma_separated_allow_empty(
+    p: Parser, parse_func: Callable[[Parser], Optional[NodeT]]
+) -> Sequence[WithTrailingComma[NodeT]]:
+    nodes = []
+    while True:
+        inner = parse_func(p)
+        if inner is None:
+            if not nodes:
+                return []
+            else:
+                _raise_with_expected(p, "next list element")
+        comma = _maybe_consume_punctuation(p, ",")
+        node = WithTrailingComma(inner, comma)
+        nodes.append(node)
+        if comma is None:
+            break
+    return nodes
+
+
 def _maybe_parse_col_name_list(p: Parser) -> Optional[ColNameList]:
     if _next_is_punctuation(p, "("):
         open_paren = _expect_punctuation(p, "(")
@@ -653,7 +981,7 @@ def _parse_into_clause(p: Parser) -> IntoClause:
         into = _expect_keyword(p, "INTO")
     else:
         into = _maybe_consume_keyword(p, "INTO")
-    table = _parse_table_reference(p)
+    table = _parse_table_name(p)
     col_names = _maybe_parse_col_name_list(p)
     return IntoClause(into, table, col_names)
 
@@ -713,7 +1041,7 @@ def _parse_insert(p: Parser) -> Insert:
         ignore = None
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
-    odku = _parse_odku_clause(p)
+    odku = _parse_maybe_clause(p, _parse_odku_clause)
     return Insert((), insert, ignore, into, values, odku)
 
 
@@ -762,16 +1090,32 @@ _VERB_TO_PARSER = {
 }
 
 
-def _parse_identifier(p: Parser) -> Identifier:
-    token = _next_or_else(p, "identifier")
+def _maybe_parse_identifier(p: Parser) -> Optional[Identifier]:
+    token = p.pi.peek()
+    if token is None:
+        return None
     if token.typ is not TokenType.identifier:
-        raise InvalidSyntax.from_unexpected_token(token, "identifier")
+        if token.typ is TokenType.string:
+            delimiter = p.dialect.get_identifier_delimiter()
+            if token.text[0] == delimiter == token.text[-1]:
+                identifier = token.text[1:-1]
+                p.pi.next()
+                return Identifier(token, identifier)
+        return None
+    p.pi.next()
     return Identifier(token, token.text)
 
 
-def _parse_table_reference(p: Parser) -> Expression:
-    # TODO support namespace.table
-    return _parse_identifier(p)
+def _parse_identifier(p: Parser) -> Identifier:
+    token = _next_or_else(p, "identifier")
+    if token.typ is not TokenType.identifier:
+        if token.typ is TokenType.string:
+            delimiter = p.dialect.get_identifier_delimiter()
+            if token.text[0] == delimiter == token.text[-1]:
+                identifier = token.text[1:-1]
+                return Identifier(token, identifier)
+        raise InvalidSyntax.from_unexpected_token(token, "identifier")
+    return Identifier(token, token.text)
 
 
 def _parse_select_expr(p: Parser) -> SelectExpr:
@@ -884,6 +1228,19 @@ def _parse_binop(p: Parser, precedence: int) -> Expression:
             return left
 
 
+# Keywords that support function-like syntax
+KEYWORD_FUNCTIONS = {"VALUES"}
+
+
+def _parse_function_call(p: Parser, callee: Expression) -> FunctionCall:
+    left_paren = _expect_punctuation(p, "(")
+    args = []
+    if not _next_is_punctuation(p, ")"):
+        args = _parse_comma_separated(p, _parse_expression)
+    right_paren = _expect_punctuation(p, ")")
+    return FunctionCall(callee, left_paren, args, right_paren)
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation and token.text == "*":
@@ -894,18 +1251,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
         return Parenthesized(Punctuation(token, "("), inner, right)
     elif token.typ is TokenType.identifier:
         expr = Identifier(token, token.text)
-        left_paren = _maybe_consume_punctuation(p, "(")
-        if left_paren:
-            args = []
-            if not _next_is_punctuation(p, ")"):
-                while True:
-                    arg = _parse_expression(p)
-                    comma = _maybe_consume_punctuation(p, ",")
-                    args.append(WithTrailingComma(arg, comma))
-                    if comma is None:
-                        break
-            right_paren = _expect_punctuation(p, ")")
-            return FunctionCall(expr, left_paren, args, right_paren)
+        if _next_is_punctuation(p, "("):
+            return _parse_function_call(p, expr)
         return expr
     elif token.typ is TokenType.number:
         return IntegerLiteral(token, int(token.text))
@@ -917,6 +1264,9 @@ def _parse_simple_expression(p: Parser) -> Expression:
             return Identifier(token, text)
         else:
             return StringLiteral(token, text)
+    elif token.typ is TokenType.keyword and token.text in KEYWORD_FUNCTIONS:
+        kw = Keyword(token, token.text)
+        return _parse_function_call(p, KeywordIdentifier(kw))
     else:
         raise InvalidSyntax.from_unexpected_token(token, "expression")
 

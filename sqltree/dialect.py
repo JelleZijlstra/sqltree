@@ -59,6 +59,9 @@ class Dialect:
             self.version, start_version=start_version, end_version=end_version
         )
 
+    def get_identifier_delimiter(self) -> str:
+        return _IDENTIFIER_QUOTE[self.vendor]
+
 
 DEFAULT_DIALECT = Dialect(Vendor.mysql)
 
@@ -105,6 +108,12 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
 }
 _missing_features = set(Feature) - set(_FEATURES)
 assert not _missing_features, f"missing settings for {_missing_features}"
+
+_IDENTIFIER_QUOTE = {
+    Vendor.mysql: "`",
+    Vendor.presto: '"',
+    Vendor.redshift: '"',  # https://docs.aws.amazon.com/redshift/latest/dg/r_names.html
+}
 
 
 # from https://dev.mysql.com/doc/refman/5.7/en/keywords.html#keywords-in-current-series
@@ -371,6 +380,7 @@ MYSQL8_NEW_KEYWORDS = {
 }
 # https://prestodb.io/docs/current/language/reserved.html
 PRESTO_KEYWORDS = {
+    "SET",  # not actually a keyword but otherwise we can't parse UPDATE
     "ALTER",
     "AND",
     "AS",
@@ -443,6 +453,7 @@ PRESTO_KEYWORDS = {
 }
 # https://docs.aws.amazon.com/redshift/latest/dg/r_pg_keywords.html
 REDSHIFT_KEYWORDS = {
+    "SET",  # not actually a keyword but otherwise we can't parse UPDATE
     "AES128",
     "AES256",
     "ALL",

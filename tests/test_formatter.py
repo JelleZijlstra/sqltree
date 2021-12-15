@@ -115,6 +115,90 @@ def test_select() -> None:
         LIMIT 4
         """
     )
+    assert format("select x from y {limit}") == "SELECT x\nFROM y\n{limit}\n"
+    assert (
+        format("select x from y order by z {limit}")
+        == "SELECT x\nFROM y\nORDER BY z\n{limit}\n"
+    )
+    assert (
+        format("select x from `y` where `select` = 3")
+        == "SELECT x\nFROM y\nWHERE `select` = 3\n"
+    )
+    assert (
+        format('select x from "y" where "select" = 3', Dialect(Vendor.redshift))
+        == 'SELECT x\nFROM y\nWHERE "select" = 3\n'
+    )
+
+
+def test_table_reference() -> None:
+    assert format("select x from y use index(z)") == "SELECT x\nFROM y\nUSE INDEX(z)\n"
+    assert (
+        format("select x from y use index(z), ignore key for join(z)")
+        == "SELECT x\nFROM y\nUSE INDEX(z),\nIGNORE KEY FOR JOIN(z)\n"
+    )
+    assert (
+        format("select x from y use index(z), ignore key for order by   (z)")
+        == "SELECT x\nFROM y\nUSE INDEX(z),\nIGNORE KEY FOR ORDER BY(z)\n"
+    )
+    assert format("select x from y use index()") == "SELECT x\nFROM y\nUSE INDEX()\n"
+    with pytest.raises(ParseError):
+        format("select x from y force index()")
+
+    assert format("select x from (a, b)") == "SELECT x\nFROM (a, b)\n"
+    assert format("select x from a, b") == "SELECT x\nFROM a, b\n"
+
+    assert (
+        format("select x from a join b", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        """
+    )
+    assert (
+        format("select x from a join b join c", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        JOIN
+            c
+        """
+    )
+    assert (
+        format("select x from a join b on x = y join c on y = x", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        ON x = y
+        JOIN
+            c
+        ON y = x
+        """
+    )
+    assert (
+        format("select x from a join b on x = y join c on y = x and c = d", indent=8)
+        == """
+        SELECT x
+        FROM
+            a
+        JOIN
+            b
+        ON x = y
+        JOIN
+            c
+        ON
+            y = x
+            AND c = d
+        """
+    )
 
 
 def test_update() -> None:
@@ -200,6 +284,16 @@ def test_insert() -> None:
     assert (
         format("insert into x(a) select x from y")
         == "INSERT INTO x(a)\nSELECT x\nFROM y\n"
+    )
+    assert (
+        format(
+            "insert into x(a) values(1) on duplicate key update a = values(a)", indent=8
+        )
+        == """
+        INSERT INTO x(a)
+        VALUES (1)
+        ON DUPLICATE KEY UPDATE a = VALUES(a)
+        """
     )
 
 
