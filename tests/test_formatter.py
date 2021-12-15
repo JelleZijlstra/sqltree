@@ -145,6 +145,7 @@ def test_table_reference() -> None:
         format("select x from y force index()")
 
     assert format("select x from (a, b)") == "SELECT x\nFROM (a, b)\n"
+    assert format("select x from a, b") == "SELECT x\nFROM a, b\n"
 
 
 def test_update() -> None:

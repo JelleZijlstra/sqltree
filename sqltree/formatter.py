@@ -183,8 +183,7 @@ class Formatter(Visitor[None]):
             self.write("FROM")
         else:
             self.visit(node.kw)
-        self.add_space()
-        self.visit(node.table)
+        self.write_comma_list(node.table)
 
     def visit_WhereClause(self, node: p.WhereClause) -> None:
         self.start_new_line()

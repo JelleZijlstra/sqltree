@@ -263,18 +263,19 @@ class SubqueryFactor(Node):
 @dataclass
 class TableReferenceList(Node):
     left_paren: Punctuation
-    references: Sequence[WithTrailingComma["TableReference"]]
+    references: "TableReferences"
     right_paren: Punctuation
 
 
 TableFactor = Union[SimpleTableFactor, SubqueryFactor, TableReferenceList]
 TableReference = Union[TableFactor, JoinedTable]
+TableReferences = Sequence[WithTrailingComma[TableReference]]
 
 
 @dataclass
 class FromClause(Node):
     kw: Optional[Keyword] = field(compare=False, repr=False)
-    table: TableReference
+    table: TableReferences
 
 
 @dataclass
@@ -707,13 +708,17 @@ def _parse_table_reference(p: Parser) -> TableReference:
     return ref
 
 
+def _parse_table_references(p: Parser) -> TableReferences:
+    return _parse_comma_separated(p, _parse_table_reference)
+
+
 def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
     from_kw = _maybe_consume_keyword(p, "FROM")
     if from_kw is not None:
-        table = _parse_table_reference(p)
+        table = _parse_table_references(p)
         return FromClause(from_kw, table)
     if not require_from:
-        table = _parse_table_reference(p)
+        table = _parse_table_references(p)
         return FromClause(None, table)
     return None
 
