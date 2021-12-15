@@ -99,6 +99,20 @@ class Placeholder(Expression, Leaf):
 
 
 @dataclass
+class ExpressionWithComma(Node):
+    expression: Expression
+    trailing_comma: Optional[Punctuation] = None
+
+
+@dataclass
+class FunctionCall(Expression):
+    callee: Expression
+    left_paren: Punctuation
+    args: Sequence[ExpressionWithComma]
+    right_paren: Punctuation
+
+
+@dataclass
 class BinOp(Expression):
     left: Expression
     op: Union[Punctuation, Keyword]
@@ -412,10 +426,10 @@ def _parse_statement(p: Parser) -> Statement:
 def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[FromClause]:
     from_kw = _maybe_consume_keyword(p, "FROM")
     if from_kw is not None:
-        table = _parse_expression(p)
+        table = _parse_table_reference(p)
         return FromClause(from_kw, table)
     if not require_from:
-        table = _parse_expression(p)
+        table = _parse_table_reference(p)
         return FromClause(None, table)
     return None
 
@@ -423,16 +437,16 @@ def _parse_from_clause(p: Parser, *, require_from: bool = True) -> Optional[From
 def _parse_where_clause(p: Parser) -> Optional[WhereClause]:
     kw = _maybe_consume_keyword(p, "WHERE")
     if kw is not None:
-        table = _parse_expression(p)
-        return WhereClause(kw, table)
+        expr = _parse_expression(p)
+        return WhereClause(kw, expr)
     return None
 
 
 def _parse_having_clause(p: Parser) -> Optional[HavingClause]:
     kw = _maybe_consume_keyword(p, "HAVING")
     if kw is not None:
-        table = _parse_expression(p)
-        return HavingClause(kw, table)
+        expr = _parse_expression(p)
+        return HavingClause(kw, expr)
     return None
 
 
@@ -522,7 +536,7 @@ def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
 
 def _parse_update(p: Parser) -> Update:
     kw = _expect_keyword(p, "UPDATE")
-    table = _parse_expression(p)
+    table = _parse_table_reference(p)
     set_clause = _parse_set_clause(p)
     where_clause = _parse_where_clause(p)
     allow_limit = p.dialect.supports_feature(Feature.update_limit)
@@ -640,7 +654,7 @@ def _parse_into_clause(p: Parser) -> IntoClause:
         into = _expect_keyword(p, "INTO")
     else:
         into = _maybe_consume_keyword(p, "INTO")
-    table = _parse_expression(p)
+    table = _parse_table_reference(p)
     col_names = _maybe_parse_col_name_list(p)
     return IntoClause(into, table, col_names)
 
@@ -780,6 +794,11 @@ def _parse_identifier(p: Parser) -> Identifier:
     return Identifier(token, token.text)
 
 
+def _parse_table_reference(p: Parser) -> Expression:
+    # TODO support namespace.table
+    return _parse_identifier(p)
+
+
 def _parse_select_expr(p: Parser) -> SelectExpr:
     expr = _parse_expression(p)
     alias = trailing_comma = None
@@ -905,7 +924,20 @@ def _parse_simple_expression(p: Parser) -> Expression:
         right = _expect_punctuation(p, ")")
         return Parenthesized(Punctuation(token, "("), inner, right)
     elif token.typ is TokenType.identifier:
-        return Identifier(token, token.text)
+        expr = Identifier(token, token.text)
+        left_paren = _maybe_consume_punctuation(p, "(")
+        if left_paren:
+            args = []
+            if not _next_is_punctuation(p, ")"):
+                while True:
+                    arg = _parse_expression(p)
+                    comma = _maybe_consume_punctuation(p, ",")
+                    args.append(ExpressionWithComma(arg, comma))
+                    if comma is None:
+                        break
+            right_paren = _expect_punctuation(p, ")")
+            return FunctionCall(expr, left_paren, args, right_paren)
+        return expr
     elif token.typ is TokenType.number:
         return IntegerLiteral(token, int(token.text))
     elif token.typ is TokenType.placeholder:

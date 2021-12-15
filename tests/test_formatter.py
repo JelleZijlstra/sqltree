@@ -42,6 +42,15 @@ def test_select() -> None:
     with pytest.raises(ParseError):
         format(select_limit_all)
 
+    assert (
+        format(
+            "select max(x) from y where x = some(function, many, args) and y ="
+            " no_args()"
+        )
+        == "SELECT max(x)\nFROM y\nWHERE x = some(function, many, args) AND y ="
+        " no_args()\n"
+    )
+
 
 def test_update() -> None:
     assert (

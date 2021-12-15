@@ -310,6 +310,17 @@ class Formatter(Visitor[None]):
     def visit_Star(self, node: p.Star) -> None:
         self.pieces.append("*")
 
+    def visit_ExpressionWithComma(self, node: p.ExpressionWithComma) -> None:
+        self.visit(node.expression)
+        self.visit_trailing_comma(node.trailing_comma)
+
+    def visit_FunctionCall(self, node: p.FunctionCall) -> None:
+        self.visit(node.callee)
+        self.visit(node.left_paren)
+        for arg in node.args:
+            self.visit(arg)
+        self.visit(node.right_paren)
+
     def visit_Parenthesized(self, node: p.Parenthesized) -> None:
         self.visit(node.left_punc)
         self.visit(node.inner)
