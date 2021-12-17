@@ -128,6 +128,11 @@ def test_select() -> None:
         format('select x from "y" where "select" = 3', Dialect(Vendor.redshift))
         == 'SELECT x\nFROM y\nWHERE "select" = 3\n'
     )
+    assert format("select distinct x from y") == "SELECT DISTINCT x\nFROM y\n"
+    assert (
+        format("select all high_priority sql_no_cache x from y")
+        == "SELECT ALL HIGH_PRIORITY SQL_NO_CACHE x\nFROM y\n"
+    )
 
 
 def test_table_reference() -> None:

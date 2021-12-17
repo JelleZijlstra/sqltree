@@ -338,6 +338,9 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.with_clause)
         self.start_new_line()
         self.visit(node.select_kw)
+        for kw in node.modifiers:
+            self.add_space()
+            self.visit(kw)
         self.write_comma_list(node.select_exprs)
         self.maybe_visit(node.from_clause)
         self.maybe_visit(node.where)

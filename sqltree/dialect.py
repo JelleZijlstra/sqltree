@@ -1,6 +1,6 @@
 import enum
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Set, Tuple, Union
+from typing import Dict, Optional, Sequence, Set, Tuple, Union
 
 Version = Optional[Tuple[int, ...]]
 
@@ -61,6 +61,25 @@ class Dialect:
 
     def get_identifier_delimiter(self) -> str:
         return _IDENTIFIER_QUOTE[self.vendor]
+
+    def get_select_modifiers(self) -> Sequence[Tuple[str, ...]]:
+        if self.vendor is Vendor.mysql:
+            return [
+                ("ALL", "DISTINCT", "DISTINCTROW"),
+                ("HIGH_PRIORITY",),
+                ("STRAIGHT_JOIN",),
+                ("SQL_SMALL_RESULT",),
+                ("SQL_BIG_RESULT",),
+                ("SQL_BUFFER_RESULT",),
+                ("SQL_NO_CACHE",)
+                if version_is_in(self.version, start_version=(8,))
+                else ("SQL_CACHE", "SQL_NO_CACHE"),
+                ("SQL_CALC_FOUND_ROWS",),
+            ]
+        elif self.vendor is Vendor.redshift or self.vendor is Vendor.presto:
+            return [("ALL", "DISTINCT")]
+        else:
+            raise NotImplementedError(self.vendor)
 
 
 DEFAULT_DIALECT = Dialect(Vendor.mysql)

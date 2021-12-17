@@ -269,7 +269,7 @@ class TableReferenceList(Node):
 
 TableFactor = Union[SimpleTableFactor, SubqueryFactor, TableReferenceList]
 TableReference = Union[TableFactor, JoinedTable]
-TableReferences = Sequence[WithTrailingComma[TableReference]]
+TableReferences = Sequence[WithTrailingComma[TableReference]]  # type: ignore
 
 
 @dataclass
@@ -365,6 +365,7 @@ class Statement(Node):
 class Select(Statement):
     with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
+    modifiers: Sequence[Keyword]
     select_exprs: Sequence[WithTrailingComma[SelectExpr]]
     from_clause: MaybeClause[FromClause] = None
     where: MaybeClause[WhereClause] = None
@@ -896,6 +897,12 @@ def _parse_select(p: Parser) -> Select:
     else:
         with_clause = None
     select = _expect_keyword(p, "SELECT")
+    possible_modifiers = p.dialect.get_select_modifiers()
+    modifiers = []
+    for group in possible_modifiers:
+        kw = _maybe_consume_one_of_keywords(p, group)
+        if kw is not None:
+            modifiers.append(kw)
     select_exprs = _parse_comma_separated(p, _parse_select_expr)
 
     from_clause = _parse_maybe_clause(p, _parse_from_clause)
@@ -909,6 +916,7 @@ def _parse_select(p: Parser) -> Select:
         (),
         with_clause,
         select,
+        modifiers,
         select_exprs,
         from_clause,
         where_clause,
@@ -1348,6 +1356,18 @@ def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
         else:
             p.pi.wind_back()
             break
+    return None
+
+
+def _maybe_consume_one_of_keywords(
+    p: Parser, keywords: Sequence[str]
+) -> Optional[Keyword]:
+    for token in p.pi:
+        for keyword in keywords:
+            if _token_is_keyword(p, token, keyword):
+                return Keyword(token, token.text)
+        p.pi.wind_back()
+        break
     return None
 
 
