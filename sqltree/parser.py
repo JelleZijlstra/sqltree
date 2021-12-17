@@ -162,6 +162,29 @@ class Parenthesized(Expression):
 
 
 @dataclass
+class ElseClause(Node):
+    else_kw: Keyword
+    expr: Expression
+
+
+@dataclass
+class WhenThen(Node):
+    when_kw: Keyword
+    condition: Expression
+    then_kw: Keyword
+    result: Expression
+
+
+@dataclass
+class CaseExpression(Expression):
+    case_kw: Keyword
+    value: Optional[Expression]
+    when_thens: Sequence[WhenThen]
+    else_clause: Optional[ElseClause]
+    end_kw: Keyword
+
+
+@dataclass
 class Star(Expression, Leaf):
     pass
 
@@ -1273,6 +1296,41 @@ def _parse_function_call(p: Parser, callee: Expression) -> FunctionCall:
     return FunctionCall(callee, left_paren, args, right_paren)
 
 
+def _parse_else_clause(p: Parser) -> Optional[ElseClause]:
+    kw = _maybe_consume_keyword(p, "ELSE")
+    if kw is None:
+        return None
+    expr = _parse_expression(p)
+    return ElseClause(kw, expr)
+
+
+def _parse_when_then(p: Parser) -> Optional[WhenThen]:
+    when_kw = _maybe_consume_keyword(p, "WHEN")
+    if when_kw is None:
+        return None
+    condition = _parse_expression(p)
+    then_kw = _expect_keyword(p, "THEN")
+    result = _parse_expression(p)
+    return WhenThen(when_kw, condition, then_kw, result)
+
+
+def _parse_case_expression(p: Parser) -> CaseExpression:
+    case_kw = _expect_keyword(p, "CASE")
+    if _next_is_keyword(p, "WHEN"):
+        value = None
+    else:
+        value = _parse_expression(p)
+    when_thens = []
+    while True:
+        when_then = _parse_when_then(p)
+        if when_then is None:
+            break
+        when_thens.append(when_then)
+    else_clause = _parse_else_clause(p)
+    end_kw = _expect_keyword(p, "END")
+    return CaseExpression(case_kw, value, when_thens, else_clause, end_kw)
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation and token.text == "*":
@@ -1299,11 +1357,14 @@ def _parse_simple_expression(p: Parser) -> Expression:
             return Identifier(token, text)
         else:
             return StringLiteral(token, text)
-    elif token.typ is TokenType.keyword and token.text in KEYWORD_FUNCTIONS:
-        kw = Keyword(token, token.text)
-        return _parse_function_call(p, KeywordIdentifier(kw))
-    else:
-        raise InvalidSyntax.from_unexpected_token(token, "expression")
+    elif token.typ is TokenType.keyword:
+        if token.text in KEYWORD_FUNCTIONS:
+            kw = Keyword(token, token.text)
+            return _parse_function_call(p, KeywordIdentifier(kw))
+        elif token.text == "CASE":
+            p.pi.wind_back()
+            return _parse_case_expression(p)
+    raise InvalidSyntax.from_unexpected_token(token, "expression")
 
 
 def _next_is_punctuation(p: Parser, punctuation: str) -> bool:

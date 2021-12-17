@@ -446,6 +446,31 @@ class Formatter(Visitor[None]):
         self.write_comma_list(node.exprs, with_space=False)
         self.visit(node.right_paren)
 
+    def visit_WhenThen(self, node: p.WhenThen) -> None:
+        self.visit(node.when_kw)
+        self.add_space()
+        self.visit(node.condition)
+        self.add_space()
+        self.visit(node.then_kw)
+        self.add_space()
+        self.visit(node.result)
+
+    def visit_ElseClause(self, node: p.ElseClause) -> None:
+        self.visit(node.else_kw)
+        self.add_space()
+        self.visit(node.expr)
+
+    def visit_CaseExpression(self, node: p.CaseExpression) -> None:
+        self.visit(node.case_kw)
+        self.add_space()
+        self.maybe_visit(node.value, add_space=True)
+        for when_then in node.when_thens:
+            self.add_space()
+            self.visit(when_then)
+        self.add_space()
+        self.maybe_visit(node.else_clause, add_space=True)
+        self.visit(node.end_kw)
+
     def visit_BinOp(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()
         if precedence >= p.MIN_BOOLEAN_PRECEDENCE:

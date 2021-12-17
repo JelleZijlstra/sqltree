@@ -169,6 +169,14 @@ def test_select() -> None:
         WHERE x IN {lst}
         """
     )
+    assert (
+        format("select case x when y then z else alpha end")
+        == "SELECT CASE x WHEN y THEN z ELSE alpha END\n"
+    )
+    assert (
+        format("select case when y then z when alpha then beta end from gamma")
+        == "SELECT CASE WHEN y THEN z WHEN alpha THEN beta END\nFROM gamma\n"
+    )
 
 
 def test_table_reference() -> None:
