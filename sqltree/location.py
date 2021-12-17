@@ -8,6 +8,7 @@ class Location:
     end_index: int  # index of the last character included in the token
 
     def display(self) -> str:
+        is_past_end = self.start_index >= len(self.sql)
         starting_lineno = self.sql.count("\n", 0, self.start_index)
         try:
             previous_newline = self.sql.rindex("\n", 0, self.start_index)
@@ -22,7 +23,12 @@ class Location:
         pieces = []
         pieces.append(f"{starting_lineno:{lineno_length}}: ")
         pieces.append(self.sql[previous_newline + 1 : self.start_index])
-        matching_pieces = self.sql[self.start_index : self.end_index + 1].split("\n")
+        if is_past_end:
+            matching_pieces = [" "]
+        else:
+            matching_pieces = self.sql[self.start_index : self.end_index + 1].split(
+                "\n"
+            )
         leading_length = lineno_length + 2 + (self.start_index - previous_newline - 1)
         remaining_carets = None
         for i, piece in enumerate(matching_pieces):

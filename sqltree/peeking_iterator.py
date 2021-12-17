@@ -33,6 +33,9 @@ class PeekingIterator(Generic[T]):
     def current(self) -> T:
         return self.seq[self.next_pos - 1]
 
+    def peek_or_raise(self) -> T:
+        return self.seq[self.next_pos]
+
     def peek(self) -> Optional[T]:
         if self.next_pos < len(self.seq):
             return self.seq[self.next_pos]
