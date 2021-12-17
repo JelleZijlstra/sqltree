@@ -189,6 +189,33 @@ def test_select() -> None:
     )
 
 
+def test_multi_split() -> None:
+    sql = """
+        SELECT
+        ghi,
+        COUNT(CASE WHEN result = %s THEN 1 END) as count,
+        COUNT(CASE WHEN result = %s THEN 1 END) as c2
+        FROM jkl
+        WHERE abc = %s
+        AND time >= %s
+        GROUP BY def
+    """
+    assert (
+        format(sql, indent=8)
+        == """
+        SELECT
+            ghi,
+            COUNT(CASE WHEN result = %s THEN 1 END) AS count,
+            COUNT(CASE WHEN result = %s THEN 1 END) AS c2
+        FROM jkl
+        WHERE
+            abc = %s
+            AND time >= %s
+        GROUP BY def
+        """
+    )
+
+
 def test_table_reference() -> None:
     assert format("select x from y use index(z)") == "SELECT x\nFROM y\nUSE INDEX(z)\n"
     assert (

@@ -209,6 +209,9 @@ class Formatter(Visitor[None]):
                 pass
             else:
                 return
+        # Split any enclosing list first
+        if self.can_split:
+            raise LineTooLong
         self.restore_state(state)
         with self.add_indent():
             for node in nodes:
