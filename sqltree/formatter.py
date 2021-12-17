@@ -410,6 +410,11 @@ class Formatter(Visitor[None]):
         else:
             self.write(node.text)
 
+    def visit_Dotted(self, node: p.Dotted) -> None:
+        self.visit(node.left)
+        self.visit(node.dot)
+        self.visit(node.right)
+
     def visit_Placeholder(self, node: p.Placeholder) -> None:
         self.write(node.text)
 
