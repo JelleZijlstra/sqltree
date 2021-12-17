@@ -20,6 +20,7 @@ class TokenType(enum.Enum):
     identifier = 5
     placeholder = 6
     comment = 7
+    eof = 8
 
     def make(self, text: str, loc: Location) -> "Token":
         return Token(self, text, loc)

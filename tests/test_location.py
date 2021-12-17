@@ -13,3 +13,6 @@ def test_location() -> None:
 
     loc = Location("a\nbcde\nf", 3, 4)
     assert loc.display() == "1: bcde\n    ^^\n"
+
+    loc = Location("x", 1, 1)
+    assert loc.display() == "0: x \n    ^\n"

@@ -18,12 +18,11 @@ from .peeking_iterator import PeekingIterator
 from .tokenizer import Token, TokenType
 
 
-class ParseError(Exception):
-    pass
-
-
 @dataclass
-class EOFError(ParseError):
+class EOFError(Exception):
+    """Raised when EOF is encountered in the parser. This should never
+    happen because it means we parsed past the special EOF token."""
+
     expected: str
 
     def __post_init__(self) -> None:
@@ -34,25 +33,26 @@ class EOFError(ParseError):
 
 
 @dataclass
-class InvalidSyntax(ParseError):
+class ParseError(Exception):
     message: str
     location: Location
 
     def __post_init__(self) -> None:
         super().__init__(self.message)
-        self.location.display()
 
     @classmethod
-    def from_unexpected_token(cls, token: Token, expected: str) -> "InvalidSyntax":
-        return InvalidSyntax(
-            f"Unexpected {token.text!r} (expected {expected})", token.loc
-        )
+    def from_unexpected_token(cls, token: Token, expected: str) -> "ParseError":
+        if token.typ is TokenType.eof:
+            text = "EOF"
+        else:
+            text = repr(token.text)
+        return ParseError(f"Unexpected {text} (expected {expected})", token.loc)
 
     @classmethod
     def from_disallowed(
         cls, token: Token, dialect: Dialect, feature: str
-    ) -> "InvalidSyntax":
-        return InvalidSyntax(f"{dialect} does not support {feature}", token.loc)
+    ) -> "ParseError":
+        return ParseError(f"{dialect} does not support {feature}", token.loc)
 
     def __str__(self) -> str:
         return f"{self.message}\n{self.location.display().rstrip()}"
@@ -137,6 +137,13 @@ class FunctionCall(Expression):
 
 
 @dataclass
+class ExprList(Expression):
+    left_paren: Punctuation
+    exprs: Sequence[WithTrailingComma[Expression]]
+    right_paren: Punctuation
+
+
+@dataclass
 class BinOp(Expression):
     left: Expression
     op: Union[Punctuation, Keyword]
@@ -152,6 +159,29 @@ class Parenthesized(Expression):
     left_punc: Punctuation = field(compare=False, repr=False)
     inner: Expression
     right_punc: Punctuation = field(compare=False, repr=False)
+
+
+@dataclass
+class ElseClause(Node):
+    else_kw: Keyword
+    expr: Expression
+
+
+@dataclass
+class WhenThen(Node):
+    when_kw: Keyword
+    condition: Expression
+    then_kw: Keyword
+    result: Expression
+
+
+@dataclass
+class CaseExpression(Expression):
+    case_kw: Keyword
+    value: Optional[Expression]
+    when_thens: Sequence[WhenThen]
+    else_clause: Optional[ElseClause]
+    end_kw: Keyword
 
 
 @dataclass
@@ -269,7 +299,7 @@ class TableReferenceList(Node):
 
 TableFactor = Union[SimpleTableFactor, SubqueryFactor, TableReferenceList]
 TableReference = Union[TableFactor, JoinedTable]
-TableReferences = Sequence[WithTrailingComma[TableReference]]
+TableReferences = Sequence[WithTrailingComma[TableReference]]  # type: ignore
 
 
 @dataclass
@@ -365,6 +395,7 @@ class Statement(Node):
 class Select(Statement):
     with_clause: Optional[WithClause]
     select_kw: Keyword = field(compare=False, repr=False)
+    modifiers: Sequence[Keyword]
     select_exprs: Sequence[WithTrailingComma[SelectExpr]]
     from_clause: MaybeClause[FromClause] = None
     where: MaybeClause[WhereClause] = None
@@ -456,7 +487,7 @@ class DefaultValues(Node):
 
 
 @dataclass
-class Subselect(Node):
+class Subselect(Expression):
     left_paren: Optional[Punctuation]
     select: Select
     right_paren: Optional[Punctuation]
@@ -492,6 +523,12 @@ def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
     return _parse_statement(p)
 
 
+def _assert_done(p: Parser) -> None:
+    remaining = p.pi.peek_or_raise()
+    if remaining.typ is not TokenType.eof:
+        raise ParseError.from_unexpected_token(remaining, "EOF")
+
+
 def _parse_statement(p: Parser) -> Statement:
     first = p.pi.peek()
     if first is None:
@@ -500,24 +537,20 @@ def _parse_statement(p: Parser) -> Statement:
         try:
             parser = _VERB_TO_PARSER[first.text]
         except KeyError:
-            raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
+            raise ParseError(f"Unexpected {first.text!r}", first.loc)
         else:
             statement = parser(p)
-        remaining = p.pi.peek()
-        if remaining is not None:
-            raise InvalidSyntax.from_unexpected_token(remaining, "EOF")
+        _assert_done(p)
         return statement
     # In Redshift, INSERT is a soft keyword, so INSERT wouldn't match the previous expression.
     elif first.typ is TokenType.identifier:
         try:
             parser = _VERB_TO_PARSER[first.text.upper()]
         except KeyError:
-            raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
+            raise ParseError(f"Unexpected {first.text!r}", first.loc)
         else:
             statement = parser(p)
-        remaining = p.pi.peek()
-        if remaining is not None:
-            raise InvalidSyntax.from_unexpected_token(remaining, "EOF")
+        _assert_done(p)
         return statement
     elif first.typ is TokenType.comment:
         p.pi.next()
@@ -526,7 +559,7 @@ def _parse_statement(p: Parser) -> Statement:
         leading_comments = (comment, *statement.leading_comments)
         return replace(statement, leading_comments=leading_comments)
     else:
-        raise InvalidSyntax(f"Unexpected {first.text!r}", first.loc)
+        raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
 
 def _parse_maybe_clause(
@@ -575,7 +608,7 @@ def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
                 if for_what is None:
                     expected = "JOIN, ORDER BY, or GROUP BY"
                     token = _next_or_else(p, expected)
-                    raise InvalidSyntax.from_unexpected_token(token, expected)
+                    raise ParseError.from_unexpected_token(token, expected)
     else:
         for_what = None
     left_paren = _expect_punctuation(p, "(")
@@ -583,7 +616,7 @@ def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
         index_list = []
         right_paren = _expect_punctuation(p, ")")
         if intro_kw.text != "USE":
-            raise InvalidSyntax(
+            raise ParseError(
                 f"Index list must be nonempty for {intro_kw.text} {kind_kw.text}",
                 right_paren.token.loc,
             )
@@ -688,7 +721,7 @@ def _parse_simple_join(p: Parser, left: TableReference) -> SimpleJoinedTable:
     if join_kw is None:
         join_kw = _expect_keyword(p, "JOIN")
     elif inner_cross is not None:
-        raise InvalidSyntax(
+        raise ParseError(
             f"Cannot combine {inner_cross.text} with STRAIGHT_JOIN", join_kw.token.loc
         )
     right = _parse_table_factor(p)
@@ -754,7 +787,7 @@ def _parse_order_by_clause(
     kwseq = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
     if kwseq is not None:
         if not allowed:
-            raise InvalidSyntax.from_disallowed(
+            raise ParseError.from_disallowed(
                 kwseq.keywords[0].token, p.dialect, "ORDER BY in this context"
             )
         exprs = _parse_order_by_list(p)
@@ -777,7 +810,7 @@ def _parse_limit_clause(p: Parser, *, allowed: bool = True) -> Optional[LimitCla
     kw = _maybe_consume_keyword(p, "LIMIT")
     if kw is not None:
         if not allowed:
-            raise InvalidSyntax.from_disallowed(
+            raise ParseError.from_disallowed(
                 kw.token, p.dialect, "LIMIT in this context"
             )
         expr = _parse_simple_expression(p)
@@ -791,20 +824,18 @@ def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
         all_kw = _maybe_consume_keyword(p, "ALL")
         if all_kw is not None:
             if not p.dialect.supports_feature(Feature.limit_all):
-                raise InvalidSyntax.from_disallowed(
-                    all_kw.token, p.dialect, "LIMIT ALL"
-                )
+                raise ParseError.from_disallowed(all_kw.token, p.dialect, "LIMIT ALL")
             expr = All(all_kw)
         else:
             expr = _parse_simple_expression(p)
         if _next_is_punctuation(p, ","):
             offset_leaf = _expect_punctuation(p, ",")
             if not p.dialect.supports_feature(Feature.comma_offset):
-                raise InvalidSyntax.from_disallowed(
+                raise ParseError.from_disallowed(
                     offset_leaf.token, p.dialect, "LIMIT offset, row_count"
                 )
             if isinstance(expr, All):
-                raise InvalidSyntax.from_disallowed(
+                raise ParseError.from_disallowed(
                     offset_leaf.token, p.dialect, "ALL combined with offset"
                 )
             offset = expr
@@ -847,7 +878,7 @@ def _parse_using_clause(p: Parser, *, allowed: bool = True) -> Optional[UsingCla
     if kw is None:
         return None
     if not allowed:
-        raise InvalidSyntax.from_disallowed(kw.token, p.dialect, "USING")
+        raise ParseError.from_disallowed(kw.token, p.dialect, "USING")
     tables = []
     while True:
         table = _parse_table_name_with_comma(p)
@@ -864,7 +895,7 @@ def _parse_delete(p: Parser) -> Delete:
     )
     if from_clause is None:
         token = _next_or_else(p, "FROM")
-        raise InvalidSyntax.from_unexpected_token(token, "FROM")
+        raise ParseError.from_unexpected_token(token, "FROM")
     allow_using = p.dialect.supports_feature(Feature.delete_using)
     if allow_using:
         using_clause = _parse_maybe_clause(p, _parse_using_clause)
@@ -896,6 +927,12 @@ def _parse_select(p: Parser) -> Select:
     else:
         with_clause = None
     select = _expect_keyword(p, "SELECT")
+    possible_modifiers = p.dialect.get_select_modifiers()
+    modifiers = []
+    for group in possible_modifiers:
+        kw = _maybe_consume_one_of_keywords(p, group)
+        if kw is not None:
+            modifiers.append(kw)
     select_exprs = _parse_comma_separated(p, _parse_select_expr)
 
     from_clause = _parse_maybe_clause(p, _parse_from_clause)
@@ -909,6 +946,7 @@ def _parse_select(p: Parser) -> Select:
         (),
         with_clause,
         select,
+        modifiers,
         select_exprs,
         from_clause,
         where_clause,
@@ -940,11 +978,8 @@ def _parse_comma_separated(
 
 
 def _raise_with_expected(p: Parser, expected: str) -> NoReturn:
-    token = p.pi.peek()
-    if token is None:
-        raise EOFError(expected)
-    else:
-        raise InvalidSyntax.from_unexpected_token(token, expected)
+    token = p.pi.peek_or_raise()
+    raise ParseError.from_unexpected_token(token, expected)
 
 
 def _parse_comma_separated_allow_empty(
@@ -1048,7 +1083,7 @@ def _parse_insert(p: Parser) -> Insert:
 def _parse_replace(p: Parser) -> Replace:
     insert = _expect_keyword(p, "REPLACE")
     if not p.dialect.supports_feature(Feature.replace):
-        raise InvalidSyntax(f"{p.dialect} does not support REPLACE", insert.token.loc)
+        raise ParseError(f"{p.dialect} does not support REPLACE", insert.token.loc)
     into = _parse_into_clause(p)
     values = _parse_values_clause(p)
     return Replace((), insert, into, values)
@@ -1071,13 +1106,11 @@ def _parse_with_clause(p: Parser) -> WithClause:
 
 def _parse_with(p: Parser) -> Statement:
     with_clause = _parse_with_clause(p)
-    token = p.pi.peek()
+    token = p.pi.peek_or_raise()
     statement = _parse_statement(p)
     if isinstance(statement, (Select, Update, Delete)):
         return replace(statement, with_clause=with_clause)
-    if token is None:
-        raise EOFError("SELECT, UPDATE, or DELETE")
-    raise InvalidSyntax.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
+    raise ParseError.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
 
 
 _VERB_TO_PARSER = {
@@ -1114,7 +1147,7 @@ def _parse_identifier(p: Parser) -> Identifier:
             if token.text[0] == delimiter == token.text[-1]:
                 identifier = token.text[1:-1]
                 return Identifier(token, identifier)
-        raise InvalidSyntax.from_unexpected_token(token, "identifier")
+        raise ParseError.from_unexpected_token(token, "identifier")
     return Identifier(token, token.text)
 
 
@@ -1222,10 +1255,27 @@ def _parse_binop(p: Parser, precedence: int) -> Expression:
             else:
                 assert token.typ is TokenType.keyword
                 op = Keyword(token, token.text)
-            right = _parse_binop(p, precedence - 1)
+            if token.text in ("IN", "NOT IN"):
+                right = _parse_in_rhs(p)
+            else:
+                right = _parse_binop(p, precedence - 1)
             left = BinOp(left, op, right)
         else:
             return left
+
+
+def _parse_in_rhs(p: Parser) -> Expression:
+    token = p.pi.peek()
+    if token is not None and token.typ is TokenType.placeholder:
+        p.pi.next()
+        return Placeholder(token, token.text)
+    left = _expect_punctuation(p, "(")
+    if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+        p.pi.wind_back()
+        return _parse_subselect(p, True)
+    exprs = _parse_comma_separated(p, _parse_expression)
+    right = _expect_punctuation(p, ")")
+    return ExprList(left, exprs, right)
 
 
 # Keywords that support function-like syntax
@@ -1241,11 +1291,49 @@ def _parse_function_call(p: Parser, callee: Expression) -> FunctionCall:
     return FunctionCall(callee, left_paren, args, right_paren)
 
 
+def _parse_else_clause(p: Parser) -> Optional[ElseClause]:
+    kw = _maybe_consume_keyword(p, "ELSE")
+    if kw is None:
+        return None
+    expr = _parse_expression(p)
+    return ElseClause(kw, expr)
+
+
+def _parse_when_then(p: Parser) -> Optional[WhenThen]:
+    when_kw = _maybe_consume_keyword(p, "WHEN")
+    if when_kw is None:
+        return None
+    condition = _parse_expression(p)
+    then_kw = _expect_keyword(p, "THEN")
+    result = _parse_expression(p)
+    return WhenThen(when_kw, condition, then_kw, result)
+
+
+def _parse_case_expression(p: Parser) -> CaseExpression:
+    case_kw = _expect_keyword(p, "CASE")
+    if _next_is_keyword(p, "WHEN"):
+        value = None
+    else:
+        value = _parse_expression(p)
+    when_thens = []
+    while True:
+        when_then = _parse_when_then(p)
+        if when_then is None:
+            break
+        when_thens.append(when_then)
+    else_clause = _parse_else_clause(p)
+    end_kw = _expect_keyword(p, "END")
+    return CaseExpression(case_kw, value, when_thens, else_clause, end_kw)
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation and token.text == "*":
         return Star(token)
     elif token.typ is TokenType.punctuation and token.text == "(":
+        if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+            p.pi.wind_back()
+            return _parse_subselect(p, True)
         inner = _parse_expression(p)
         right = _expect_punctuation(p, ")")
         return Parenthesized(Punctuation(token, "("), inner, right)
@@ -1264,11 +1352,14 @@ def _parse_simple_expression(p: Parser) -> Expression:
             return Identifier(token, text)
         else:
             return StringLiteral(token, text)
-    elif token.typ is TokenType.keyword and token.text in KEYWORD_FUNCTIONS:
-        kw = Keyword(token, token.text)
-        return _parse_function_call(p, KeywordIdentifier(kw))
-    else:
-        raise InvalidSyntax.from_unexpected_token(token, "expression")
+    elif token.typ is TokenType.keyword:
+        if token.text in KEYWORD_FUNCTIONS:
+            kw = Keyword(token, token.text)
+            return _parse_function_call(p, KeywordIdentifier(kw))
+        elif token.text == "CASE":
+            p.pi.wind_back()
+            return _parse_case_expression(p)
+    raise ParseError.from_unexpected_token(token, "expression")
 
 
 def _next_is_punctuation(p: Parser, punctuation: str) -> bool:
@@ -1293,7 +1384,7 @@ def _maybe_consume_punctuation(p: Parser, punctuation: str) -> Optional[Punctuat
 def _expect_punctuation(p: Parser, punctuation: str) -> Punctuation:
     token = _next_or_else(p, punctuation)
     if token.typ is not TokenType.punctuation or token.text != punctuation:
-        raise InvalidSyntax.from_unexpected_token(token, repr(punctuation))
+        raise ParseError.from_unexpected_token(token, repr(punctuation))
     return Punctuation(token, token.text)
 
 
@@ -1337,7 +1428,7 @@ def _next_is_keyword(p: Parser, keyword: str) -> bool:
 def _expect_keyword(p: Parser, keyword: str) -> Keyword:
     token = _next_or_else(p, keyword)
     if not _token_is_keyword(p, token, keyword):
-        raise InvalidSyntax.from_unexpected_token(token, repr(keyword))
+        raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
 
 
@@ -1348,6 +1439,18 @@ def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
         else:
             p.pi.wind_back()
             break
+    return None
+
+
+def _maybe_consume_one_of_keywords(
+    p: Parser, keywords: Sequence[str]
+) -> Optional[Keyword]:
+    for token in p.pi:
+        for keyword in keywords:
+            if _token_is_keyword(p, token, keyword):
+                return Keyword(token, token.text)
+        p.pi.wind_back()
+        break
     return None
 
 

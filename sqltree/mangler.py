@@ -9,9 +9,10 @@ Makes the following changes:
   a neighboring token.
 - Turns the following pairs of keywords into a single token:
   IS NOT, NOT IN, NOT LIKE, NOT REGEXP
+- Adds an EOF token at the end
 
 """
-from typing import Iterable
+from typing import Iterable, List
 
 from .location import Location
 from .tokenizer import Token, TokenType
@@ -20,7 +21,7 @@ KEYWORD_PAIRS = [("IS", "NOT"), ("NOT", "IN"), ("NOT", "LIKE"), ("NOT", "REGEXP"
 
 
 def mangle(tokens: Iterable[Token]) -> Iterable[Token]:
-    new_tokens = []
+    new_tokens: List[Token] = []
     for i, token in enumerate(tokens):
         if i == 0:
             new_tokens.append(token)
@@ -43,6 +44,12 @@ def mangle(tokens: Iterable[Token]) -> Iterable[Token]:
             )
             continue
         new_tokens.append(token)
+
+    if new_tokens:
+        sql = new_tokens[-1].loc.sql
+        length = len(sql)
+        loc = Location(sql, length, length)
+        new_tokens.append(Token(TokenType.eof, "", loc))
     return new_tokens
 
 

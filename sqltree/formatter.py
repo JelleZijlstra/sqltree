@@ -338,6 +338,9 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.with_clause)
         self.start_new_line()
         self.visit(node.select_kw)
+        for kw in node.modifiers:
+            self.add_space()
+            self.visit(kw)
         self.write_comma_list(node.select_exprs)
         self.maybe_visit(node.from_clause)
         self.maybe_visit(node.where)
@@ -437,6 +440,36 @@ class Formatter(Visitor[None]):
         self.visit(node.left_punc)
         self.visit(node.inner)
         self.visit(node.right_punc)
+
+    def visit_ExprList(self, node: p.ExprList) -> None:
+        self.visit(node.left_paren)
+        self.write_comma_list(node.exprs, with_space=False)
+        self.visit(node.right_paren)
+
+    def visit_WhenThen(self, node: p.WhenThen) -> None:
+        self.visit(node.when_kw)
+        self.add_space()
+        self.visit(node.condition)
+        self.add_space()
+        self.visit(node.then_kw)
+        self.add_space()
+        self.visit(node.result)
+
+    def visit_ElseClause(self, node: p.ElseClause) -> None:
+        self.visit(node.else_kw)
+        self.add_space()
+        self.visit(node.expr)
+
+    def visit_CaseExpression(self, node: p.CaseExpression) -> None:
+        self.visit(node.case_kw)
+        self.add_space()
+        self.maybe_visit(node.value, add_space=True)
+        for when_then in node.when_thens:
+            self.add_space()
+            self.visit(when_then)
+        self.add_space()
+        self.maybe_visit(node.else_clause, add_space=True)
+        self.visit(node.end_kw)
 
     def visit_BinOp(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()

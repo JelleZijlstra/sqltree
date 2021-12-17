@@ -128,6 +128,55 @@ def test_select() -> None:
         format('select x from "y" where "select" = 3', Dialect(Vendor.redshift))
         == 'SELECT x\nFROM y\nWHERE "select" = 3\n'
     )
+    assert format("select distinct x from y") == "SELECT DISTINCT x\nFROM y\n"
+    assert (
+        format("select all high_priority sql_no_cache x from y")
+        == "SELECT ALL HIGH_PRIORITY SQL_NO_CACHE x\nFROM y\n"
+    )
+    assert (
+        format("select x from y where x = (select y from x)", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x = (
+            SELECT y
+            FROM x)
+        """
+    )
+    assert (
+        format("select x from y where x in (select y from x)", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x IN (
+            SELECT y
+            FROM x)
+        """
+    )
+    assert (
+        format("select x from y where x in (a, b, c)", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x IN (a, b, c)
+        """
+    )
+    assert (
+        format("select x from y where x in {lst}", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x IN {lst}
+        """
+    )
+    assert (
+        format("select case x when y then z else alpha end")
+        == "SELECT CASE x WHEN y THEN z ELSE alpha END\n"
+    )
+    assert (
+        format("select case when y then z when alpha then beta end from gamma")
+        == "SELECT CASE WHEN y THEN z WHEN alpha THEN beta END\nFROM gamma\n"
+    )
 
 
 def test_table_reference() -> None:
