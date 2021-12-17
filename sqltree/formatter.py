@@ -426,7 +426,8 @@ class Formatter(Visitor[None]):
         self.write(str(node.value))
 
     def visit_StringLiteral(self, node: p.StringLiteral) -> None:
-        self.write(f'"{node.value}"')
+        # ' is more portable
+        self.write(f"'{node.value}'")
 
     def visit_Star(self, node: p.Star) -> None:
         self.write("*")

@@ -1367,7 +1367,7 @@ def _parse_simple_expression(p: Parser) -> Expression:
         return Placeholder(token, token.text)
     elif token.typ is TokenType.string:
         text = token.text[1:-1]
-        if token.text[0] == "`":
+        if token.text[0] == p.dialect.get_identifier_delimiter():
             return _parse_identifier_expression(p, Identifier(token, text))
         else:
             return StringLiteral(token, text)

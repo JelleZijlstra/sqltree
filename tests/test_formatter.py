@@ -184,6 +184,9 @@ def test_select() -> None:
         format("select y.x from x.y where x.y = 3")
         == "SELECT y.x\nFROM x.y\nWHERE x.y = 3\n"
     )
+    assert (
+        format("select x from y where y = 'x'") == "SELECT x\nFROM y\nWHERE y = 'x'\n"
+    )
 
 
 def test_table_reference() -> None:
