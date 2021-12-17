@@ -177,6 +177,16 @@ def test_select() -> None:
         format("select case when y then z when alpha then beta end from gamma")
         == "SELECT CASE WHEN y THEN z WHEN alpha THEN beta END\nFROM gamma\n"
     )
+    assert (
+        format("select x from y where x.y = 3") == "SELECT x\nFROM y\nWHERE x.y = 3\n"
+    )
+    assert (
+        format("select y.x from x.y where x.y = 3")
+        == "SELECT y.x\nFROM x.y\nWHERE x.y = 3\n"
+    )
+    assert (
+        format("select x from y where y = 'x'") == "SELECT x\nFROM y\nWHERE y = 'x'\n"
+    )
 
 
 def test_table_reference() -> None:

@@ -114,6 +114,13 @@ class KeywordIdentifier(Expression):
 
 
 @dataclass
+class Dotted(Expression):
+    left: Identifier
+    dot: Punctuation
+    right: Identifier
+
+
+@dataclass
 class StringLiteral(Expression, Leaf):
     value: str
 
@@ -271,7 +278,7 @@ JoinedTable = Union[SimpleJoinedTable, LeftRightJoinedTable, NaturalJoinedTable]
 
 @dataclass
 class SimpleTableFactor(Node):
-    table_name: Identifier
+    table_name: Union[Identifier, Dotted]
     as_kw: Optional[Keyword] = None
     alias: Optional[Identifier] = None
     index_hint_list: Sequence[WithTrailingComma[IndexHint]] = field(
@@ -646,9 +653,13 @@ def _parse_subquery_factor(
     )
 
 
-def _parse_table_name(p: Parser) -> Identifier:
-    # TODO dotted access
-    return _parse_identifier(p)
+def _parse_table_name(p: Parser) -> Union[Dotted, Identifier]:
+    identifier = _parse_identifier(p)
+    dot = _maybe_consume_punctuation(p, ".")
+    if dot is not None:
+        right = _parse_identifier(p)
+        return Dotted(identifier, dot, right)
+    return identifier
 
 
 def _parse_table_factor(p: Parser) -> TableFactor:
@@ -1326,6 +1337,16 @@ def _parse_case_expression(p: Parser) -> CaseExpression:
     return CaseExpression(case_kw, value, when_thens, else_clause, end_kw)
 
 
+def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expression:
+    if _next_is_punctuation(p, "("):
+        return _parse_function_call(p, identifier)
+    dot = _maybe_consume_punctuation(p, ".")
+    if dot is not None:
+        right = _parse_identifier(p)
+        return Dotted(identifier, dot, right)
+    return identifier
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation and token.text == "*":
@@ -1339,17 +1360,15 @@ def _parse_simple_expression(p: Parser) -> Expression:
         return Parenthesized(Punctuation(token, "("), inner, right)
     elif token.typ is TokenType.identifier:
         expr = Identifier(token, token.text)
-        if _next_is_punctuation(p, "("):
-            return _parse_function_call(p, expr)
-        return expr
+        return _parse_identifier_expression(p, expr)
     elif token.typ is TokenType.number:
         return IntegerLiteral(token, int(token.text))
     elif token.typ is TokenType.placeholder:
         return Placeholder(token, token.text)
     elif token.typ is TokenType.string:
         text = token.text[1:-1]
-        if token.text[0] == "`":
-            return Identifier(token, text)
+        if token.text[0] == p.dialect.get_identifier_delimiter():
+            return _parse_identifier_expression(p, Identifier(token, text))
         else:
             return StringLiteral(token, text)
     elif token.typ is TokenType.keyword:

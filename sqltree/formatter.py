@@ -410,6 +410,11 @@ class Formatter(Visitor[None]):
         else:
             self.write(node.text)
 
+    def visit_Dotted(self, node: p.Dotted) -> None:
+        self.visit(node.left)
+        self.visit(node.dot)
+        self.visit(node.right)
+
     def visit_Placeholder(self, node: p.Placeholder) -> None:
         self.write(node.text)
 
@@ -421,7 +426,8 @@ class Formatter(Visitor[None]):
         self.write(str(node.value))
 
     def visit_StringLiteral(self, node: p.StringLiteral) -> None:
-        self.write(f'"{node.value}"')
+        # ' is more portable
+        self.write(f"'{node.value}'")
 
     def visit_Star(self, node: p.Star) -> None:
         self.write("*")
