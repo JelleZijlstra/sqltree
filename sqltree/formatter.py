@@ -441,6 +441,11 @@ class Formatter(Visitor[None]):
         self.visit(node.inner)
         self.visit(node.right_punc)
 
+    def visit_ExprList(self, node: p.ExprList) -> None:
+        self.visit(node.left_paren)
+        self.write_comma_list(node.exprs, with_space=False)
+        self.visit(node.right_paren)
+
     def visit_BinOp(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()
         if precedence >= p.MIN_BOOLEAN_PRECEDENCE:

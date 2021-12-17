@@ -137,6 +137,13 @@ class FunctionCall(Expression):
 
 
 @dataclass
+class ExprList(Expression):
+    left_paren: Punctuation
+    exprs: Sequence[WithTrailingComma[Expression]]
+    right_paren: Punctuation
+
+
+@dataclass
 class BinOp(Expression):
     left: Expression
     op: Union[Punctuation, Keyword]
@@ -457,7 +464,7 @@ class DefaultValues(Node):
 
 
 @dataclass
-class Subselect(Node):
+class Subselect(Expression):
     left_paren: Optional[Punctuation]
     select: Select
     right_paren: Optional[Punctuation]
@@ -1230,10 +1237,27 @@ def _parse_binop(p: Parser, precedence: int) -> Expression:
             else:
                 assert token.typ is TokenType.keyword
                 op = Keyword(token, token.text)
-            right = _parse_binop(p, precedence - 1)
+            if token.text in ("IN", "NOT IN"):
+                right = _parse_in_rhs(p)
+            else:
+                right = _parse_binop(p, precedence - 1)
             left = BinOp(left, op, right)
         else:
             return left
+
+
+def _parse_in_rhs(p: Parser) -> Expression:
+    token = p.pi.peek()
+    if token is not None and token.typ is TokenType.placeholder:
+        p.pi.next()
+        return Placeholder(token, token.text)
+    left = _expect_punctuation(p, "(")
+    if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+        p.pi.wind_back()
+        return _parse_subselect(p, True)
+    exprs = _parse_comma_separated(p, _parse_expression)
+    right = _expect_punctuation(p, ")")
+    return ExprList(left, exprs, right)
 
 
 # Keywords that support function-like syntax
@@ -1254,6 +1278,9 @@ def _parse_simple_expression(p: Parser) -> Expression:
     if token.typ is TokenType.punctuation and token.text == "*":
         return Star(token)
     elif token.typ is TokenType.punctuation and token.text == "(":
+        if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+            p.pi.wind_back()
+            return _parse_subselect(p, True)
         inner = _parse_expression(p)
         right = _expect_punctuation(p, ")")
         return Parenthesized(Punctuation(token, "("), inner, right)

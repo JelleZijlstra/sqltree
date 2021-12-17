@@ -133,6 +133,42 @@ def test_select() -> None:
         format("select all high_priority sql_no_cache x from y")
         == "SELECT ALL HIGH_PRIORITY SQL_NO_CACHE x\nFROM y\n"
     )
+    assert (
+        format("select x from y where x = (select y from x)", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x = (
+            SELECT y
+            FROM x)
+        """
+    )
+    assert (
+        format("select x from y where x in (select y from x)", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x IN (
+            SELECT y
+            FROM x)
+        """
+    )
+    assert (
+        format("select x from y where x in (a, b, c)", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x IN (a, b, c)
+        """
+    )
+    assert (
+        format("select x from y where x in {lst}", indent=8)
+        == """
+        SELECT x
+        FROM y
+        WHERE x IN {lst}
+        """
+    )
 
 
 def test_table_reference() -> None:
