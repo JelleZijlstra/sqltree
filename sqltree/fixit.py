@@ -23,11 +23,29 @@ class SqlFormatRule(CstLintRule):
         Valid(
             '''
             sql = """
-            SELECT *
-            FROM x
+                SELECT *
+                FROM x
             """
             '''
-        )
+        ),
+        Valid(
+            '''
+            def f():
+                sql = """
+                    SELECT *
+                    FROM x
+                """
+            def g():
+              x
+
+            def weirdly_indented():
+                if x:
+                   sql = """
+                       SELECT y
+                       FROM z
+                   """
+            '''
+        ),
     ]
 
     INVALID = [
@@ -37,11 +55,29 @@ class SqlFormatRule(CstLintRule):
             column=7,
             expected_replacement='''
             sql = """
-            SELECT *
-            FROM x
+                SELECT *
+                FROM x
             """''',
         )
     ]
+
+    current_indent: int = 0
+    default_indent: int = 0
+
+    def visit_Module(self, node: cst.Module) -> None:
+        self.default_indent = len(node.default_indent.replace("\t", " " * 4))
+
+    def visit_IndentedBlock(self, node: cst.IndentedBlock) -> None:
+        self.current_indent += self._indent_of(node)
+
+    def leave_IndentedBlock(self, node: cst.IndentedBlock) -> None:
+        self.current_indent -= self._indent_of(node)
+
+    def _indent_of(self, node: cst.IndentedBlock) -> int:
+        if node.indent is not None:
+            return len(node.indent.replace("\t", " " * 4))
+        else:
+            return self.default_indent
 
     def visit_Call(self, node: cst.Call) -> None:
         # TODO format specific calls
@@ -52,12 +88,12 @@ class SqlFormatRule(CstLintRule):
         if full_name == "sql" and isinstance(node.value, cst.SimpleString):
             query = node.value.evaluated_value
             try:
-                formatted = format(query)
+                formatted = format(query, indent=self.current_indent + 4)
             except ParseError as e:
                 self.report(node, message=str(e))
             else:
-                # TODO escaping, indent to current escape level, preserve prefix
-                replacement = f'"""\n{formatted}"""'
+                # TODO escaping, preserve prefix
+                replacement = f'"""{formatted}"""'
                 if replacement != node.value.value:
                     new_str = node.value.with_changes(value=replacement)
                     self.report(node.value, replacement=new_str)

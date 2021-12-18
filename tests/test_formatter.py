@@ -47,72 +47,74 @@ def test_select() -> None:
         format(
             "select max(x) from y where x = some(function, many, args) and y ="
             " no_args()",
-            indent=8,
+            indent=12,
         )
         == """
-        SELECT max(x)
-        FROM y
-        WHERE
-            x = some(function, many, args)
-            AND y = no_args()
+            SELECT max(x)
+            FROM y
+            WHERE
+                x = some(function, many, args)
+                AND y = no_args()
         """
     )
     assert (
         format(
-            "select aaaaaa, bbbbbbbb, ccccc, dddddd from x", line_length=20, indent=8
+            "select aaaaaa, bbbbbbbb, ccccc, dddddd from x", line_length=20, indent=12
         )
         == """
-        SELECT
-            aaaaaa,
-            bbbbbbbb,
-            ccccc,
-            dddddd
-        FROM x
+            SELECT
+                aaaaaa,
+                bbbbbbbb,
+                ccccc,
+                dddddd
+            FROM x
         """
     )
     assert (
-        format("select max(x) from y where x = 1 and y = 2 and z = 3 limit 4", indent=8)
+        format(
+            "select max(x) from y where x = 1 and y = 2 and z = 3 limit 4", indent=12
+        )
         == """
-        SELECT max(x)
-        FROM y
-        WHERE
-            x = 1
-            AND y = 2
-            AND z = 3
-        LIMIT 4
+            SELECT max(x)
+            FROM y
+            WHERE
+                x = 1
+                AND y = 2
+                AND z = 3
+            LIMIT 4
         """
     )
     assert (
         format(
             "select max(x) from y where x = 1 and y = 2 or x = 2 and y = 1 limit 4",
-            indent=8,
+            indent=12,
         )
         == """
-        SELECT max(x)
-        FROM y
-        WHERE
-                x = 1
-                AND y = 2
-            OR
-                x = 2
-                AND y = 1
-        LIMIT 4
+            SELECT max(x)
+            FROM y
+            WHERE
+                    x = 1
+                    AND y = 2
+                OR
+                    x = 2
+                    AND y = 1
+            LIMIT 4
         """
     )
     assert (
         format(
-            "select max(x) from y where (x = 1 or y = 2) and z = 3 limit 4", indent=8
+            "select max(x) from y where (x = 1 or y = 2) and z = 3 limit 4", indent=12
         )
         == """
-        SELECT max(x)
-        FROM y
-        WHERE
-            (
-                x = 1
-                OR y = 2
-            )
-            AND z = 3
-        LIMIT 4
+            SELECT max(x)
+            FROM y
+            WHERE
+                (
+                    x = 1
+                    OR y = 2
+                )
+                AND z = 3
+            LIMIT 4
         """
     )
     assert format("select x from y {limit}") == "SELECT x\nFROM y\n{limit}\n"
@@ -134,39 +136,39 @@ def test_select() -> None:
         == "SELECT ALL HIGH_PRIORITY SQL_NO_CACHE x\nFROM y\n"
     )
     assert (
-        format("select x from y where x = (select y from x)", indent=8)
+        format("select x from y where x = (select y from x)", indent=12)
         == """
-        SELECT x
-        FROM y
-        WHERE x = (
-            SELECT y
-            FROM x)
+            SELECT x
+            FROM y
+            WHERE x = (
+                SELECT y
+                FROM x)
         """
     )
     assert (
-        format("select x from y where x in (select y from x)", indent=8)
+        format("select x from y where x in (select y from x)", indent=12)
         == """
-        SELECT x
-        FROM y
-        WHERE x IN (
-            SELECT y
-            FROM x)
+            SELECT x
+            FROM y
+            WHERE x IN (
+                SELECT y
+                FROM x)
         """
     )
     assert (
-        format("select x from y where x in (a, b, c)", indent=8)
+        format("select x from y where x in (a, b, c)", indent=12)
         == """
-        SELECT x
-        FROM y
-        WHERE x IN (a, b, c)
+            SELECT x
+            FROM y
+            WHERE x IN (a, b, c)
         """
     )
     assert (
-        format("select x from y where x in {lst}", indent=8)
+        format("select x from y where x in {lst}", indent=12)
         == """
-        SELECT x
-        FROM y
-        WHERE x IN {lst}
+            SELECT x
+            FROM y
+            WHERE x IN {lst}
         """
     )
     assert (
@@ -201,17 +203,17 @@ def test_multi_split() -> None:
         GROUP BY def
     """
     assert (
-        format(sql, indent=8)
+        format(sql, indent=12)
         == """
-        SELECT
-            ghi,
-            COUNT(CASE WHEN result = %s THEN 1 END) AS count,
-            COUNT(CASE WHEN result = %s THEN 1 END) AS c2
-        FROM jkl
-        WHERE
-            abc = %s
-            AND time >= %s
-        GROUP BY def
+            SELECT
+                ghi,
+                COUNT(CASE WHEN result = %s THEN 1 END) AS count,
+                COUNT(CASE WHEN result = %s THEN 1 END) AS c2
+            FROM jkl
+            WHERE
+                abc = %s
+                AND time >= %s
+            GROUP BY def
         """
     )
 
@@ -234,55 +236,55 @@ def test_table_reference() -> None:
     assert format("select x from a, b") == "SELECT x\nFROM a, b\n"
 
     assert (
-        format("select x from a join b", indent=8)
+        format("select x from a join b", indent=12)
         == """
-        SELECT x
-        FROM
-            a
-        JOIN
-            b
+            SELECT x
+            FROM
+                a
+            JOIN
+                b
         """
     )
     assert (
-        format("select x from a join b join c", indent=8)
+        format("select x from a join b join c", indent=12)
         == """
-        SELECT x
-        FROM
-            a
-        JOIN
-            b
-        JOIN
-            c
+            SELECT x
+            FROM
+                a
+            JOIN
+                b
+            JOIN
+                c
         """
     )
     assert (
-        format("select x from a join b on x = y join c on y = x", indent=8)
+        format("select x from a join b on x = y join c on y = x", indent=12)
         == """
-        SELECT x
-        FROM
-            a
-        JOIN
-            b
-        ON x = y
-        JOIN
-            c
-        ON y = x
+            SELECT x
+            FROM
+                a
+            JOIN
+                b
+            ON x = y
+            JOIN
+                c
+            ON y = x
         """
     )
     assert (
-        format("select x from a join b on x = y join c on y = x and c = d", indent=8)
+        format("select x from a join b on x = y join c on y = x and c = d", indent=12)
         == """
-        SELECT x
-        FROM
-            a
-        JOIN
-            b
-        ON x = y
-        JOIN
-            c
-        ON
-            y = x
-            AND c = d
+            SELECT x
+            FROM
+                a
+            JOIN
+                b
+            ON x = y
+            JOIN
+                c
+            ON
+                y = x
+                AND c = d
         """
     )
 
@@ -317,15 +319,15 @@ def test_delete() -> None:
         format(
             "with x as (select x from y) delete from y using z, a where x = 4",
             Dialect(Vendor.redshift),
-            indent=8,
+            indent=12,
         )
         == """
-        WITH x AS (
-            SELECT x
-            FROM y)
-        DELETE FROM y
-        USING z, a
-        WHERE x = 4
+            WITH x AS (
+                SELECT x
+                FROM y)
+            DELETE FROM y
+            USING z, a
+            WHERE x = 4
         """
     )
 
@@ -356,15 +358,15 @@ def test_insert() -> None:
         format(
             "insert into x(a) ( with x as (select z from a) select x from y)",
             Dialect(Vendor.redshift),
-            indent=8,
+            indent=12,
         )
         == """
-        INSERT INTO x(a) (
-            WITH x AS (
-                SELECT z
-                FROM a)
-            SELECT x
-            FROM y)
+            INSERT INTO x(a) (
+                WITH x AS (
+                    SELECT z
+                    FROM a)
+                SELECT x
+                FROM y)
         """
     )
     assert (
@@ -373,12 +375,13 @@ def test_insert() -> None:
     )
     assert (
         format(
-            "insert into x(a) values(1) on duplicate key update a = values(a)", indent=8
+            "insert into x(a) values(1) on duplicate key update a = values(a)",
+            indent=12,
         )
         == """
-        INSERT INTO x(a)
-        VALUES (1)
-        ON DUPLICATE KEY UPDATE a = VALUES(a)
+            INSERT INTO x(a)
+            VALUES (1)
+            ON DUPLICATE KEY UPDATE a = VALUES(a)
         """
     )
 

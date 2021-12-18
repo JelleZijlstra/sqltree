@@ -10,6 +10,7 @@ from .tokenizer import Token
 from .visitor import Transformer, Visitor
 
 DEFAULT_LINE_LENGTH = 88  # like black
+INDENT_SIZE = 4
 
 
 class LineTooLong(Exception):
@@ -35,17 +36,17 @@ class Formatter(Visitor[None]):
         self.visit(tree)
         sql = "".join(piece for line in self.lines for piece in line)
         if self.indent > 0:
-            return f"\n{sql}\n{' ' * self.indent}"
+            return f"\n{sql}\n{' ' * (self.indent - INDENT_SIZE)}"
         else:
             return sql + "\n"
 
     @contextmanager
     def add_indent(self) -> Iterator[None]:
-        self.indent += 4
+        self.indent += INDENT_SIZE
         try:
             yield
         finally:
-            self.indent -= 4
+            self.indent -= INDENT_SIZE
 
     @contextmanager
     def override_can_split(self) -> Iterator[State]:
