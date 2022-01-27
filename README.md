@@ -23,3 +23,13 @@ SELECT *
 FROM x
 WHERE x = 3
 ```
+
+## Using the fixit rule
+
+sqltree embeds a [fixit](https://fixit.readthedocs.io/en/latest/) rule for
+formatting SQL. Here is how to use it:
+
+- Install fixit if you don't have it yet
+  - `pip install fixit`
+  - `python -m fixit.cli.init_config`
+- Run `python -m fixit.cli.apply_fix --rules sqltree.fixit.SqlFormatRule path/to/your/code`
