@@ -451,3 +451,14 @@ def test_rollback() -> None:
     assert format("rollback work") == "ROLLBACK WORK\n"
     assert format("rollback and no chain release") == "ROLLBACK AND NO CHAIN RELEASE\n"
     assert format("rollback and chain no release") == "ROLLBACK AND CHAIN NO RELEASE\n"
+
+
+def test_drop_table() -> None:
+    assert format("drop table x") == "DROP TABLE x\n"
+    assert (
+        format("drop temporary table if exists x")
+        == "DROP TEMPORARY TABLE IF EXISTS x\n"
+    )
+    assert format("drop table x cascade") == "DROP TABLE x CASCADE\n"
+    assert format("drop table x restrict") == "DROP TABLE x RESTRICT\n"
+    assert format("drop table x.y, a.b") == "DROP TABLE x.y, a.b\n"
