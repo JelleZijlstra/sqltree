@@ -191,6 +191,38 @@ def test_select() -> None:
     )
 
 
+def test_union() -> None:
+    assert (
+        format("select x from y union select x from z")
+        == "SELECT x\nFROM y\nUNION\nSELECT x\nFROM z\n"
+    )
+    assert (
+        format("select x from y union all select x from z")
+        == "SELECT x\nFROM y\nUNION ALL\nSELECT x\nFROM z\n"
+    )
+    assert (
+        format("select x from y union distinct select x from z")
+        == "SELECT x\nFROM y\nUNION DISTINCT\nSELECT x\nFROM z\n"
+    )
+    assert (
+        format(
+            "select x from y union distinct select x from z union all select a from b"
+        )
+        == "SELECT x\nFROM y\nUNION DISTINCT\nSELECT x\nFROM z\nUNION ALL\nSELECT"
+        " a\nFROM b\n"
+    )
+    assert format("(select x from y)") == "(\n    SELECT x\n    FROM y)\n"
+    assert (
+        format("(select x from y) union (select x from z)")
+        == "(\n    SELECT x\n    FROM y)\nUNION\n(\n    SELECT x\n    FROM z)\n"
+    )
+    assert (
+        format("(select x from y) union (select x from z) order by x")
+        == "(\n    SELECT x\n    FROM y)\nUNION\n(\n    SELECT x\n    FROM z)\nORDER"
+        " BY x\n"
+    )
+
+
 def test_multi_split() -> None:
     sql = """
         SELECT

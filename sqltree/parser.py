@@ -413,6 +413,21 @@ class Select(Statement):
 
 
 @dataclass
+class UnionEntry(Node):
+    union_kw: Keyword = field(compare=False, repr=False)
+    all_kw: Optional[Keyword]
+    select: "Subselect"
+
+
+@dataclass
+class UnionStatement(Statement):
+    first: "Subselect"
+    others: Sequence[UnionEntry]
+    order_by: MaybeClause[OrderByClause] = None
+    limit: MaybeClause[SelectLimitClause] = None
+
+
+@dataclass
 class UsingClause(Node):
     kw: Keyword = field(compare=False, repr=False)
     tables: Sequence[WithTrailingComma[Identifier]]
@@ -565,6 +580,8 @@ def _parse_statement(p: Parser) -> Statement:
         statement = _parse_statement(p)
         leading_comments = (comment, *statement.leading_comments)
         return replace(statement, leading_comments=leading_comments)
+    elif first.typ is TokenType.punctuation and first.text == "(":
+        return _parse_select(p)
     else:
         raise ParseError(f"Unexpected {first.text!r}", first.loc)
 
@@ -932,7 +949,31 @@ def _parse_delete(p: Parser) -> Delete:
     )
 
 
-def _parse_select(p: Parser) -> Select:
+def _parse_select(p: Parser) -> Union[Select, UnionStatement]:
+    if _next_is_punctuation(p, "("):
+        first = _parse_subselect(p, True)
+    else:
+        select_stmt = _parse_single_select(p)
+        first = Subselect(None, select_stmt, None)
+        if not _next_is_keyword(p, "UNION"):
+            return select_stmt
+    rest = []
+    while _next_is_keyword(p, "UNION"):
+        union_kw = _expect_keyword(p, "UNION")
+        if _next_is_keyword(p, "ALL"):
+            kw = _expect_keyword(p, "ALL")
+        elif _next_is_keyword(p, "DISTINCT"):
+            kw = _expect_keyword(p, "DISTINCT")
+        else:
+            kw = None
+        next_select = _parse_subselect(p, require_parens=_next_is_punctuation(p, "("))
+        rest.append(UnionEntry(union_kw, kw, next_select))
+    order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
+    select_limit_clause = _parse_maybe_clause(p, _parse_select_limit_clause)
+    return UnionStatement((), first, rest, order_by_clause, select_limit_clause)
+
+
+def _parse_single_select(p: Parser) -> Select:
     if p.dialect.supports_feature(Feature.with_clause) and _next_is_keyword(p, "WITH"):
         with_clause = _parse_with_clause(p)
     else:
@@ -1041,10 +1082,10 @@ def _parse_value_list(p: Parser) -> ValueList:
 
 def _parse_subselect(p: Parser, require_parens: bool) -> Subselect:
     if not require_parens:
-        select = _parse_select(p)
+        select = _parse_single_select(p)
         return Subselect(None, select, None)
     left = _expect_punctuation(p, "(")
-    select = _parse_select(p)
+    select = _parse_single_select(p)
     right = _expect_punctuation(p, ")")
     return Subselect(left, select, right)
 
