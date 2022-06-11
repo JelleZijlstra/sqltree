@@ -726,6 +726,31 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(node.tail)
 
+    def visit_DatabaseClause(self, node: p.DatabaseClause) -> None:
+        self.add_space()
+        self.visit(node.kw)
+        self.add_space()
+        self.visit(node.db_name)
+
+    def visit_LikeClause(self, node: p.LikeClause) -> None:
+        self.add_space()
+        self.visit(node.like_kw)
+        self.add_space()
+        self.visit(node.pattern)
+
+    def visit_ShowTables(self, node: p.ShowTables) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        if node.extended_kw is not None:
+            self.visit(node.extended_kw)
+            self.add_space()
+        if node.full_kw is not None:
+            self.visit(node.full_kw)
+            self.add_space()
+        self.visit(node.tables_kw)
+        self.maybe_visit(node.db_clause)
+        self.maybe_visit(node.like_clause)
+
 
 def format_tree(
     tree: p.Node,
