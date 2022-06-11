@@ -189,6 +189,7 @@ def test_select() -> None:
     assert (
         format("select x from y where y = 'x'") == "SELECT x\nFROM y\nWHERE y = 'x'\n"
     )
+    assert format("select a.* from a, b") == "SELECT a.*\nFROM a, b\n"
 
 
 def test_expression():

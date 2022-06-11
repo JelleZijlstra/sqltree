@@ -117,6 +117,13 @@ class KeywordIdentifier(Expression):
 class Dotted(Expression):
     left: Identifier
     dot: Punctuation
+    right: Union[Identifier, Punctuation]  # can be *
+
+
+@dataclass
+class DottedTable(Node):
+    left: Identifier
+    dot: Punctuation
     right: Identifier
 
 
@@ -285,11 +292,12 @@ class NaturalJoinedTable(Node):
 
 
 JoinedTable = Union[SimpleJoinedTable, LeftRightJoinedTable, NaturalJoinedTable]
+TableName = Union[Identifier, DottedTable]
 
 
 @dataclass
 class SimpleTableFactor(Node):
-    table_name: Union[Identifier, Dotted]
+    table_name: TableName
     as_kw: Optional[Keyword] = None
     alias: Optional[Identifier] = None
     index_hint_list: Sequence[WithTrailingComma[IndexHint]] = field(
@@ -497,7 +505,7 @@ class ColNameList(Node):
 @dataclass
 class IntoClause(Node):
     kw: Optional[Keyword] = field(compare=False, repr=False)
-    table: Expression
+    table: TableName
     col_names: Optional[ColNameList]
 
 
@@ -599,7 +607,7 @@ class DropTable(Statement):
     temporary_kw: Optional[Keyword]
     table_kw: Keyword = field(compare=False, repr=False)
     if_exists: Optional[KeywordSequence]
-    tables: Sequence[WithTrailingComma[Union[Dotted, Identifier]]]
+    tables: Sequence[WithTrailingComma[TableName]]
     tail: Optional[Keyword]
 
 
@@ -733,12 +741,12 @@ def _parse_subquery_factor(
     )
 
 
-def _parse_table_name(p: Parser) -> Union[Dotted, Identifier]:
+def _parse_table_name(p: Parser) -> TableName:
     identifier = _parse_identifier(p)
     dot = _maybe_consume_punctuation(p, ".")
     if dot is not None:
         right = _parse_identifier(p)
-        return Dotted(identifier, dot, right)
+        return DottedTable(identifier, dot, right)
     return identifier
 
 
@@ -1518,7 +1526,11 @@ def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expressio
         return _parse_function_call(p, identifier)
     dot = _maybe_consume_punctuation(p, ".")
     if dot is not None:
-        right = _parse_identifier(p)
+        star = _maybe_consume_punctuation(p, "*")
+        if star is not None:
+            right = star
+        else:
+            right = _parse_identifier(p)
         return Dotted(identifier, dot, right)
     return identifier
 
