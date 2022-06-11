@@ -1,7 +1,8 @@
 import argparse
+import sys
+import typing
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
-import sys
 from typing import (
     Any,
     Dict,
@@ -14,7 +15,6 @@ from typing import (
     Type,
     Union,
 )
-import typing
 
 from . import parser as p
 from .api import sqltree
