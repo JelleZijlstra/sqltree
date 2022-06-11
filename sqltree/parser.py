@@ -670,6 +670,14 @@ class ShowReplicaStatus(Statement):
 
 
 @dataclass
+class ShowStatus(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    modifier: Optional[Keyword]  # GLOBAL or SESSION
+    status_kw: Keyword = field(compare=False, repr=False)
+    like_clause: LikeOrWhere
+
+
+@dataclass
 class ShowVariables(Statement):
     show_kw: Keyword = field(compare=False, repr=False)
     modifier: Optional[Keyword]  # GLOBAL or SESSION
@@ -1447,6 +1455,15 @@ def _parse_show_variables(
     return ShowVariables((), show, modifier, kind_kw, like_clause)
 
 
+def _parse_show_status(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowStatus:
+    modifier = _maybe_consume_one_of_keywords(modifiers_p, ["GLOBAL", "SESSION"])
+    _assert_done(modifiers_p, "GLOBAL or SESSION")
+    like_clause = _parse_like_or_where(p)
+    return ShowStatus((), show, modifier, kind_kw, like_clause)
+
+
 def _parse_show_count(
     p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
 ) -> ShowWarnErrorCount:
@@ -1480,6 +1497,7 @@ _SHOW_KIND_TO_PARSER: Dict[str, _ShowParser] = {
     "TABLE": _parse_show_table_status,
     "TRIGGERS": _parse_show_triggers,
     "VARIABLES": _parse_show_variables,
+    "STATUS": _parse_show_status,
     "COUNT": _parse_show_count,
     "WARNINGS": _parse_show_warnings_or_errors,
     "ERRORS": _parse_show_warnings_or_errors,

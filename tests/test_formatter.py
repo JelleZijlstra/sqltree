@@ -540,6 +540,14 @@ def test_show_variables() -> None:
     )
 
 
+def test_show_status() -> None:
+    assert format("show status") == "SHOW STATUS\n"
+    assert (
+        format("show global status where x = 3") == "SHOW GLOBAL STATUS\nWHERE x = 3\n"
+    )
+    assert format("show session status like 'x'") == "SHOW SESSION STATUS LIKE 'x'\n"
+
+
 def test_show_warnings() -> None:
     assert format("show warnings") == "SHOW WARNINGS\n"
     assert format("show errors") == "SHOW ERRORS\n"
