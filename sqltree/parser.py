@@ -167,6 +167,12 @@ class BinOp(Expression):
 
 
 @dataclass
+class UnaryOp(Expression):
+    op: Punctuation
+    expr: Expression
+
+
+@dataclass
 class Parenthesized(Expression):
     left_punc: Punctuation = field(compare=False, repr=False)
     inner: Expression
@@ -1519,15 +1525,20 @@ def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expressio
 
 def _parse_simple_expression(p: Parser) -> Expression:
     token = _next_or_else(p, "expression")
-    if token.typ is TokenType.punctuation and token.text == "*":
-        return Star(token)
-    elif token.typ is TokenType.punctuation and token.text == "(":
-        if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
-            p.pi.wind_back()
-            return _parse_subselect(p, True)
-        inner = _parse_expression(p)
-        right = _expect_punctuation(p, ")")
-        return Parenthesized(Punctuation(token, "("), inner, right)
+    if token.typ is TokenType.punctuation:
+        if token.text == "*":
+            return Star(token)
+        elif token.text == "(":
+            if _next_is_keyword(p, "SELECT") or _next_is_keyword(p, "WITH"):
+                p.pi.wind_back()
+                return _parse_subselect(p, True)
+            inner = _parse_expression(p)
+            right = _expect_punctuation(p, ")")
+            return Parenthesized(Punctuation(token, "("), inner, right)
+        elif token.text in ("-", "~"):
+            op = Punctuation(token, token.text)
+            operand = _parse_simple_expression(p)
+            return UnaryOp(op, operand)
     elif token.typ is TokenType.identifier:
         expr = Identifier(token, token.text)
         return _parse_identifier_expression(p, expr)

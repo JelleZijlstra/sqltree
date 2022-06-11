@@ -191,6 +191,19 @@ def test_select() -> None:
     )
 
 
+def test_expression():
+    assert (
+        format("select x from y where x = y + 1")
+        == "SELECT x\nFROM y\nWHERE x = y + 1\n"
+    )
+    assert format("select x from y where x = -1") == "SELECT x\nFROM y\nWHERE x = -1\n"
+    assert (
+        format("select -(select x from y)") == "SELECT -(\n    SELECT x\n    FROM y)\n"
+    )
+    assert format("select -1 + 1") == "SELECT -1 + 1\n"
+    assert format("select -~1") == "SELECT -(~1)\n"
+
+
 def test_union() -> None:
     assert (
         format("select x from y union select x from z")
