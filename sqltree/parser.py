@@ -960,12 +960,7 @@ def _parse_select(p: Parser) -> Union[Select, UnionStatement]:
     rest = []
     while _next_is_keyword(p, "UNION"):
         union_kw = _expect_keyword(p, "UNION")
-        if _next_is_keyword(p, "ALL"):
-            kw = _expect_keyword(p, "ALL")
-        elif _next_is_keyword(p, "DISTINCT"):
-            kw = _expect_keyword(p, "DISTINCT")
-        else:
-            kw = None
+        kw = _maybe_consume_one_of_keywords(p, ("ALL", "DISTINCT"))
         next_select = _parse_subselect(p, require_parens=_next_is_punctuation(p, "("))
         rest.append(UnionEntry(union_kw, kw, next_select))
     order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
