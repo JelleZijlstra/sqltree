@@ -492,31 +492,32 @@ def test_show_tables() -> None:
     assert format("show tables") == "SHOW TABLES\n"
     assert (
         format("show extended full tables from x")
-        == "SHOW EXTENDED FULL TABLES FROM x\n"
+        == "SHOW EXTENDED FULL TABLES\nFROM x\n"
     )
-    assert format("show tables in x") == "SHOW TABLES IN x\n"
-    assert format("show tables in x like 'y'") == "SHOW TABLES IN x LIKE 'y'\n"
-    assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"
+    assert format("show tables in x") == "SHOW TABLES\nIN x\n"
+    assert format("show tables in x like 'y'") == "SHOW TABLES\nIN x\nLIKE 'y'\n"
+    assert format("show tables in x where z = 3") == "SHOW TABLES\nIN x\nWHERE z = 3\n"
 
 
 def test_show_triggers() -> None:
     assert format("show triggers") == "SHOW TRIGGERS\n"
-    assert format("show triggers in x") == "SHOW TRIGGERS IN x\n"
-    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS IN x LIKE 'y'\n"
+    assert format("show triggers in x") == "SHOW TRIGGERS\nIN x\n"
+    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS\nIN x\nLIKE 'y'\n"
     assert (
-        format("show triggers in x where z = 3") == "SHOW TRIGGERS IN x\nWHERE z = 3\n"
+        format("show triggers in x where z = 3") == "SHOW TRIGGERS\nIN x\nWHERE z = 3\n"
     )
 
 
 def test_show_table_status() -> None:
     assert format("show table status") == "SHOW TABLE STATUS\n"
-    assert format("show table status in x") == "SHOW TABLE STATUS IN x\n"
+    assert format("show table status in x") == "SHOW TABLE STATUS\nIN x\n"
     assert (
-        format("show table status in x like 'y'") == "SHOW TABLE STATUS IN x LIKE 'y'\n"
+        format("show table status in x like 'y'")
+        == "SHOW TABLE STATUS\nIN x\nLIKE 'y'\n"
     )
     assert (
         format("show table status in x where z = 3")
-        == "SHOW TABLE STATUS IN x\nWHERE z = 3\n"
+        == "SHOW TABLE STATUS\nIN x\nWHERE z = 3\n"
     )
 
 
@@ -525,7 +526,7 @@ def test_show_replica_status() -> None:
     assert format("show slave status") == "SHOW SLAVE STATUS\n"
     assert (
         format("show replica status for channel 'x'")
-        == "SHOW REPLICA STATUS FOR CHANNEL 'x'\n"
+        == "SHOW REPLICA STATUS\nFOR CHANNEL 'x'\n"
     )
 
     assert format("show slave hosts") == "SHOW SLAVE HOSTS\n"
@@ -539,7 +540,8 @@ def test_show_variables() -> None:
         == "SHOW GLOBAL VARIABLES\nWHERE x = 3\n"
     )
     assert (
-        format("show session variables like 'x'") == "SHOW SESSION VARIABLES LIKE 'x'\n"
+        format("show session variables like 'x'")
+        == "SHOW SESSION VARIABLES\nLIKE 'x'\n"
     )
 
 
@@ -548,7 +550,7 @@ def test_show_status() -> None:
     assert (
         format("show global status where x = 3") == "SHOW GLOBAL STATUS\nWHERE x = 3\n"
     )
-    assert format("show session status like 'x'") == "SHOW SESSION STATUS LIKE 'x'\n"
+    assert format("show session status like 'x'") == "SHOW SESSION STATUS\nLIKE 'x'\n"
 
 
 def test_show_warnings() -> None:
