@@ -528,6 +528,9 @@ def test_show_replica_status() -> None:
         == "SHOW REPLICA STATUS FOR CHANNEL 'x'\n"
     )
 
+    assert format("show slave hosts") == "SHOW SLAVE HOSTS\n"
+    assert format("show replicas") == "SHOW REPLICAS\n"
+
 
 def test_show_variables() -> None:
     assert format("show variables") == "SHOW VARIABLES\n"

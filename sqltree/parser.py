@@ -670,6 +670,12 @@ class ShowReplicaStatus(Statement):
 
 
 @dataclass
+class ShowReplicas(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    replicas_kw: Union[Keyword, KeywordSequence]  # REPLICAS or SLAVE HOSTS
+
+
+@dataclass
 class ShowStatus(Statement):
     show_kw: Keyword = field(compare=False, repr=False)
     modifier: Optional[Keyword]  # GLOBAL or SESSION
@@ -1382,9 +1388,16 @@ def _parse_string_literal(p: Parser) -> StringLiteral:
 
 def _parse_show_replica_status(
     p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
-) -> ShowReplicaStatus:
+) -> Union[ShowReplicas, ShowReplicaStatus]:
     _assert_done(modifiers_p, "no modifiers")
-    status = _expect_keyword(p, "STATUS")
+    if _token_is_keyword(p, kind_kw.token, "SLAVE"):
+        kw = _expect_one_of_keywords(p, ["STATUS", "HOSTS"])
+        if _token_is_keyword(p, kw.token, "STATUS"):
+            status = kw
+        else:
+            return ShowReplicas((), show, KeywordSequence([kind_kw, kw]))
+    else:
+        status = _expect_keyword(p, "STATUS")
     for_kw = _maybe_consume_keyword(p, "FOR")
     if for_kw is not None:
         channel = _expect_keyword(p, "CHANNEL")
@@ -1393,6 +1406,13 @@ def _parse_show_replica_status(
     else:
         channel_clause = None
     return ShowReplicaStatus((), show, kind_kw, status, channel_clause)
+
+
+def _parse_show_replicas(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowReplicas:
+    _assert_done(modifiers_p, "no modifiers")
+    return ShowReplicas((), show, kind_kw)
 
 
 def _parse_like_or_where(p: Parser) -> Optional[LikeOrWhere]:
@@ -1493,6 +1513,7 @@ _ShowParser = Callable[[Parser, Keyword, Parser, Keyword], Statement]
 _SHOW_KIND_TO_PARSER: Dict[str, _ShowParser] = {
     "REPLICA": _parse_show_replica_status,
     "SLAVE": _parse_show_replica_status,
+    "REPLICAS": _parse_show_replicas,
     "TABLES": _parse_show_tables,
     "TABLE": _parse_show_table_status,
     "TRIGGERS": _parse_show_triggers,

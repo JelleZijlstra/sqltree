@@ -783,6 +783,11 @@ class Formatter(Visitor[None]):
         self.visit(node.status_kw)
         self.maybe_visit(node.channel_clause)
 
+    def visit_ShowReplicas(self, node: p.ShowReplicas) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        self.visit(node.replicas_kw)
+
     def visit_ShowStatus(self, node: p.ShowStatus) -> None:
         self.visit(node.show_kw)
         self.add_space()
