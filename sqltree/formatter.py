@@ -1,7 +1,18 @@
 import argparse
 from contextlib import contextmanager
-from dataclasses import dataclass, field
-from typing import Generator, Iterator, List, Optional, Sequence, Tuple, Type
+from dataclasses import dataclass, field, fields
+from typing import (
+    Any,
+    Dict,
+    Generator,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
 
 from . import parser as p
 from .api import sqltree
@@ -11,6 +22,8 @@ from .visitor import Transformer, Visitor
 
 DEFAULT_LINE_LENGTH = 88  # like black
 INDENT_SIZE = 4
+
+NoneType = type(None)
 
 
 class LineTooLong(Exception):
@@ -185,18 +198,6 @@ class Formatter(Visitor[None]):
             self.visit(node.kw)
         self.write_comma_list(node.table)
 
-    def visit_WhereClause(self, node: p.WhereClause) -> None:
-        self.start_new_line()
-        self.visit(node.kw)
-        self.add_space()
-        self.visit(node.conditions)
-
-    def visit_HavingClause(self, node: p.HavingClause) -> None:
-        self.start_new_line()
-        self.visit(node.kw)
-        self.add_space()
-        self.visit(node.conditions)
-
     def write_comma_list(
         self, nodes: Sequence[p.WithTrailingComma[p.Node]], with_space: bool = True
     ) -> None:
@@ -303,12 +304,6 @@ class Formatter(Visitor[None]):
 
     def visit_All(self, node: p.All) -> None:
         self.visit(node.kw)
-
-    def visit_LimitClause(self, node: p.LimitClause) -> None:
-        self.start_new_line()
-        self.visit(node.kw)
-        self.add_space()
-        self.visit(node.row_count)
 
     def visit_SelectLimitClause(self, node: p.SelectLimitClause) -> None:
         self.start_new_line()
@@ -553,20 +548,6 @@ class Formatter(Visitor[None]):
         else:
             self.visit(node)
 
-    def visit_SelectExpr(self, node: p.SelectExpr) -> None:
-        self.visit(node.expr)
-        if node.as_kw is not None and node.alias is not None:
-            self.add_space()
-            self.visit(node.as_kw)
-            self.add_space()
-            self.visit(node.alias)
-
-    def visit_OrderByExpr(self, node: p.OrderByExpr) -> None:
-        self.visit(node.expr)
-        if node.direction_kw is not None:
-            self.add_space()
-            self.visit(node.direction_kw)
-
     def visit_IndexHint(self, node: p.IndexHint) -> None:
         self.start_new_line()
         self.visit(node.intro_kw)
@@ -672,44 +653,6 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.write_comma_list(node.characteristics)
 
-    def visit_BeginStatement(self, node: p.BeginStatement) -> None:
-        self.visit(node.begin_kw)
-        if node.work_kw is not None:
-            self.add_space()
-            self.visit(node.work_kw)
-
-    def visit_ChainClause(self, node: p.ChainClause) -> None:
-        self.add_space()
-        self.visit(node.and_kw)
-        if node.no_kw is not None:
-            self.add_space()
-            self.visit(node.no_kw)
-        self.add_space()
-        self.visit(node.chain_kw)
-
-    def visit_ReleaseClause(self, node: p.ReleaseClause) -> None:
-        self.add_space()
-        if node.no_kw is not None:
-            self.visit(node.no_kw)
-            self.add_space()
-        self.visit(node.release_kw)
-
-    def visit_CommitStatement(self, node: p.CommitStatement) -> None:
-        self.visit(node.commit_kw)
-        if node.work_kw is not None:
-            self.add_space()
-            self.visit(node.work_kw)
-        self.maybe_visit(node.chain)
-        self.maybe_visit(node.release)
-
-    def visit_RollbackStatement(self, node: p.RollbackStatement) -> None:
-        self.visit(node.rollback_kw)
-        if node.work_kw is not None:
-            self.add_space()
-            self.visit(node.work_kw)
-        self.maybe_visit(node.chain)
-        self.maybe_visit(node.release)
-
     def visit_DropTable(self, node: p.DropTable) -> None:
         self.visit(node.drop_kw)
         self.add_space()
@@ -726,101 +669,59 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(node.tail)
 
-    def visit_DatabaseClause(self, node: p.DatabaseClause) -> None:
-        self.add_space()
-        self.visit(node.kw)
-        self.add_space()
-        self.visit(node.db_name)
+    def generic_visit(self, node: p.Node) -> None:
+        """For unhandled nodes, we try to generate the formatter."""
+        typ = type(node)
+        lines = []
+        is_statement = isinstance(node, p.Statement)
+        is_clause = isinstance(node, p.Clause)
+        if is_statement or is_clause:
+            lines.append("self.start_new_line()")
+        for i, field_obj in enumerate(fields(typ)):
+            if is_statement and field_obj.name == "leading_comments":
+                continue
+            if (
+                hasattr(field_obj.type, "__origin__")
+                and field_obj.type.__origin__ is Union
+            ):
+                is_optional = NoneType in field_obj.type.__args__
+                types = {t for t in field_obj.type.__args__ if t is not NoneType}
+            else:
+                is_optional = False
+                types = {field_obj.type}
+            if types <= {
+                p.Keyword,
+                p.KeywordSequence,
+                p.StringLiteral,
+                p.Identifier,
+                p.Expression,
+            }:
+                if is_optional:
+                    if i == 0 and (is_statement or is_clause):
+                        raise NotImplementedError(f"{type(node)}")
+                    lines.append(f"if node.{field_obj.name} is not None:")
+                    lines.append("    self.add_space()")
+                    lines.append(f"    self.visit(node.{field_obj.name})")
+                else:
+                    if i > 0 or (not is_statement and not is_clause):
+                        lines.append("self.add_space()")
+                    lines.append(f"self.visit(node.{field_obj.name})")
+            elif all(isinstance(t, type) and issubclass(t, p.Node) for t in types):
+                if is_optional:
+                    lines.append(f"self.maybe_visit(node.{field_obj.name})")
+                else:
+                    lines.append(f"self.visit(node.{field_obj.name})")
+            else:
+                raise NotImplementedError(f"{type(node)}: {field_obj}")
 
-    def visit_LikeClause(self, node: p.LikeClause) -> None:
-        self.add_space()
-        self.visit(node.like_kw)
-        self.add_space()
-        self.visit(node.pattern)
-
-    def visit_ShowTables(self, node: p.ShowTables) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        if node.extended_kw is not None:
-            self.visit(node.extended_kw)
-            self.add_space()
-        if node.full_kw is not None:
-            self.visit(node.full_kw)
-            self.add_space()
-        self.visit(node.tables_kw)
-        self.maybe_visit(node.db_clause)
-        self.maybe_visit(node.like_clause)
-
-    def visit_ShowTriggers(self, node: p.ShowTriggers) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        self.visit(node.triggers_kw)
-        self.maybe_visit(node.db_clause)
-        self.maybe_visit(node.like_clause)
-
-    def visit_ShowTableStatus(self, node: p.ShowTableStatus) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        self.visit(node.table_kw)
-        self.add_space()
-        self.visit(node.status_kw)
-        self.maybe_visit(node.db_clause)
-        self.maybe_visit(node.like_clause)
-
-    def visit_ChannelClause(self, node: p.ChannelClause) -> None:
-        self.add_space()
-        self.visit(node.for_kw)
-        self.add_space()
-        self.visit(node.channel_kw)
-        self.add_space()
-        self.visit(node.channel)
-
-    def visit_ShowReplicaStatus(self, node: p.ShowReplicaStatus) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        self.visit(node.replica_kw)
-        self.add_space()
-        self.visit(node.status_kw)
-        self.maybe_visit(node.channel_clause)
-
-    def visit_ShowReplicas(self, node: p.ShowReplicas) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        self.visit(node.replicas_kw)
-
-    def visit_ShowStatus(self, node: p.ShowStatus) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        if node.modifier is not None:
-            self.visit(node.modifier)
-            self.add_space()
-        self.visit(node.status_kw)
-        self.maybe_visit(node.like_clause)
-
-    def visit_ShowVariables(self, node: p.ShowVariables) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        if node.modifier is not None:
-            self.visit(node.modifier)
-            self.add_space()
-        self.visit(node.variables_kw)
-        self.maybe_visit(node.like_clause)
-
-    def visit_ShowWarnErrorCount(self, node: p.ShowWarnErrorCount) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        self.visit(node.count_kw)
-        self.visit(node.left_paren)
-        self.visit(node.star)
-        self.visit(node.right_paren)
-        self.add_space()
-        self.visit(node.kind)
-
-    def visit_ShowWarnError(self, node: p.ShowWarnError) -> None:
-        self.visit(node.show_kw)
-        self.add_space()
-        self.visit(node.kind)
-        self.maybe_visit(node.limit_clause)
+        body = "".join(f"    {line}\n" for line in lines)
+        func_name = f"visit_{typ.__name__}"
+        code = f"def {func_name}(self, node: p.{typ.__name__}) -> None:\n{body}"
+        ns: Dict[str, Any] = {"p": p}
+        exec(code, ns)
+        func = ns[func_name]
+        func(self, node)
+        setattr(type(self), func_name, func)
 
 
 def format_tree(

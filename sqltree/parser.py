@@ -73,6 +73,10 @@ class Node:
 NodeT = TypeVar("NodeT", bound=Node, covariant=True)
 
 
+class Clause(Node):
+    pass
+
+
 @dataclass
 class Leaf(Node):
     token: Token = field(repr=False, compare=False)
@@ -330,37 +334,37 @@ TableReferences = Sequence[WithTrailingComma[TableReference]]  # type: ignore
 
 
 @dataclass
-class FromClause(Node):
+class FromClause(Clause):
     kw: Optional[Keyword] = field(compare=False, repr=False)
     table: TableReferences
 
 
 @dataclass
-class WhereClause(Node):
+class WhereClause(Clause):
     kw: Keyword = field(compare=False, repr=False)
     conditions: Expression
 
 
 @dataclass
-class GroupByClause(Node):
+class GroupByClause(Clause):
     kwseq: KeywordSequence = field(compare=False, repr=False)
     expr: Sequence[WithTrailingComma[OrderByExpr]]
 
 
 @dataclass
-class HavingClause(Node):
+class HavingClause(Clause):
     kw: Keyword = field(compare=False, repr=False)
     conditions: Expression
 
 
 @dataclass
-class OrderByClause(Node):
+class OrderByClause(Clause):
     kwseq: KeywordSequence = field(compare=False, repr=False)
     expr: Sequence[WithTrailingComma[OrderByExpr]]
 
 
 @dataclass
-class LimitClause(Node):
+class LimitClause(Clause):
     kw: Keyword = field(compare=False, repr=False)
     row_count: Expression
 
@@ -371,7 +375,7 @@ class All(Node):
 
 
 @dataclass
-class SelectLimitClause(Node):
+class SelectLimitClause(Clause):
     """A LIMIT clause on a SELECT statement, which supports more features.
 
     There are two syntaxes for LIMIT with an offset:
@@ -406,7 +410,7 @@ class WithClause(Node):
 
 
 @dataclass
-class PlaceholderClause(Node):
+class PlaceholderClause(Clause):
     placeholder: Placeholder
 
 
@@ -448,7 +452,7 @@ class UnionStatement(Statement):
 
 
 @dataclass
-class UsingClause(Node):
+class UsingClause(Clause):
     kw: Keyword = field(compare=False, repr=False)
     tables: Sequence[WithTrailingComma[Identifier]]
 
@@ -480,7 +484,7 @@ class Assignment(Node):
 
 
 @dataclass
-class SetClause(Node):
+class SetClause(Clause):
     kw: Keyword = field(compare=False, repr=False)
     assignments: Sequence[WithTrailingComma[Assignment]]
 
@@ -504,7 +508,7 @@ class ColNameList(Node):
 
 
 @dataclass
-class IntoClause(Node):
+class IntoClause(Clause):
     kw: Optional[Keyword] = field(compare=False, repr=False)
     table: TableName
     col_names: Optional[ColNameList]
@@ -518,7 +522,7 @@ class ValueList(Node):
 
 
 @dataclass
-class ValuesClause(Node):
+class ValuesClause(Clause):
     kw: Keyword = field(compare=False, repr=False)
     value_lists: Sequence[WithTrailingComma[ValueList]]
 
@@ -539,7 +543,7 @@ InsertValues = Union[ValuesClause, DefaultValues, Subselect]
 
 
 @dataclass
-class OdkuClause(Node):
+class OdkuClause(Clause):
     kwseq: KeywordSequence
     assignments: Sequence[WithTrailingComma[Assignment]]
 
@@ -613,13 +617,13 @@ class DropTable(Statement):
 
 
 @dataclass
-class DatabaseClause(Node):
+class DatabaseClause(Clause):
     kw: Keyword  # FROM or IN
     db_name: Identifier
 
 
 @dataclass
-class LikeClause(Node):
+class LikeClause(Clause):
     like_kw: Keyword = field(compare=False, repr=False)
     pattern: StringLiteral
 
@@ -655,7 +659,7 @@ class ShowTriggers(Statement):
 
 
 @dataclass
-class ChannelClause(Node):
+class ChannelClause(Clause):
     for_kw: Keyword = field(compare=False, repr=False)
     channel_kw: Keyword = field(compare=False, repr=False)
     channel: StringLiteral
