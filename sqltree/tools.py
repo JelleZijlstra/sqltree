@@ -9,7 +9,7 @@ from typing import Sequence
 
 from .dialect import DEFAULT_DIALECT, Dialect
 from .parser import Dotted, Identifier, IntoClause, SimpleTableFactor
-from .sqltree import sqltree
+from .api import sqltree
 from .visitor import walk
 
 

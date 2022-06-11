@@ -7,8 +7,8 @@ a syntax tree for SQL queries. Possible use cases include:
 - Translating queries to another SQL dialect
 - Autoformatting
 
-sqltree is still in an early stage of development, but it
-can already parse some queries:
+sqltree is in an early stage of development, but it
+can parse basic queries:
 
 ```
 $ python -m sqltree "SELECT * FROM x WHERE x = 3"
@@ -23,6 +23,15 @@ SELECT *
 FROM x
 WHERE x = 3
 ```
+
+## API
+
+- `sqltree.sqltree`: parse a SQL query and return the parse tree. See `sqltree.parser`
+  for the possible parse nodes.
+- `sqltree.formatter.format`: reformat a SQL query.
+- `sqltree.tools.get_tables`: get the tables referenced in a SQL query.
+
+More detailed documentation to follow.
 
 ## Using the fixit rule
 

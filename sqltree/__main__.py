@@ -2,7 +2,7 @@ import argparse
 
 from .dialect import DEFAULT_DIALECT, Dialect, Vendor, Version
 from .parser import ParseError
-from .sqltree import sqltree
+from .api import sqltree
 
 
 def parse_version(version: str) -> Version:
