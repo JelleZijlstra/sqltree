@@ -486,3 +486,14 @@ def test_drop_table() -> None:
     assert format("drop table x cascade") == "DROP TABLE x CASCADE\n"
     assert format("drop table x restrict") == "DROP TABLE x RESTRICT\n"
     assert format("drop table x.y, a.b") == "DROP TABLE x.y, a.b\n"
+
+
+def test_show_tables() -> None:
+    assert format("show tables") == "SHOW TABLES\n"
+    assert (
+        format("show extended full tables from x")
+        == "SHOW EXTENDED FULL TABLES FROM x\n"
+    )
+    assert format("show tables in x") == "SHOW TABLES IN x\n"
+    assert format("show tables in x like 'y'") == "SHOW TABLES IN x LIKE 'y'\n"
+    assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"

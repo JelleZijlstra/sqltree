@@ -611,6 +611,28 @@ class DropTable(Statement):
     tail: Optional[Keyword]
 
 
+@dataclass
+class DatabaseClause(Node):
+    kw: Keyword  # FROM or IN
+    db_name: Identifier
+
+
+@dataclass
+class LikeClause(Node):
+    like_kw: Keyword = field(compare=False, repr=False)
+    pattern: StringLiteral
+
+
+@dataclass
+class ShowTables(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    extended_kw: Optional[Keyword]
+    full_kw: Optional[Keyword]
+    tables_kw: Keyword = field(compare=False, repr=False)
+    db_clause: MaybeClause[DatabaseClause]
+    like_clause: MaybeClause[Union[LikeClause, WhereClause]]
+
+
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
     p = Parser(PeekingIterator(list(tokens)), dialect)
     return _parse_statement(p)
@@ -1279,6 +1301,36 @@ def _parse_drop(p: Parser) -> DropTable:
     return DropTable((), drop, temporary, table, if_exists, tables, tail)
 
 
+def _parse_show(p: Parser) -> ShowTables:
+    show = _expect_keyword(p, "SHOW")
+    extended = _maybe_consume_keyword(p, "EXTENDED")
+    full = _maybe_consume_keyword(p, "FULL")
+    tables = _expect_keyword(p, "TABLES")
+    db_kw = _maybe_consume_one_of_keywords(p, ["FROM", "IN"])
+    if db_kw is not None:
+        db = _parse_identifier(p)
+        db_clause = DatabaseClause(db_kw, db)
+    else:
+        db_clause = None
+    like_kw = _maybe_consume_keyword(p, "LIKE")
+    if like_kw is not None:
+        token = _next_or_else(p, "pattern")
+        if token.typ is not TokenType.string:
+            raise ParseError.from_unexpected_token(token, "pattern")
+        text = token.text[1:-1]
+        if token.text[0] == p.dialect.get_identifier_delimiter():
+            raise ParseError.from_unexpected_token(token, "pattern")
+        like_clause = LikeClause(like_kw, StringLiteral(token, text))
+    else:
+        where_kw = _maybe_consume_keyword(p, "WHERE")
+        if where_kw is not None:
+            expr = _parse_expression(p)
+            like_clause = WhereClause(where_kw, expr)
+        else:
+            like_clause = None
+    return ShowTables((), show, extended, full, tables, db_clause, like_clause)
+
+
 def _parse_cte(p: Parser) -> CommonTableExpression:
     name = _parse_identifier(p)
     col_names = _maybe_parse_col_name_list(p)
@@ -1315,6 +1367,7 @@ _VERB_TO_PARSER = {
     "COMMIT": _parse_commit,
     "ROLLBACK": _parse_rollback,
     "DROP": _parse_drop,
+    "SHOW": _parse_show,
 }
 
 
