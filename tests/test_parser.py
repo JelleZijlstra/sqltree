@@ -1,6 +1,6 @@
 from sqltree import parser as p
-from sqltree.location import Location
 from sqltree.api import sqltree
+from sqltree.location import Location
 from sqltree.tokenizer import Token, TokenType
 
 T = Token(TokenType.keyword, "x", Location("x", 1, 1))

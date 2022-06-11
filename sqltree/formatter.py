@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from typing import Generator, Iterator, List, Optional, Sequence, Tuple, Type
 
 from . import parser as p
-from .dialect import DEFAULT_DIALECT, Dialect
 from .api import sqltree
+from .dialect import DEFAULT_DIALECT, Dialect
 from .tokenizer import Token
 from .visitor import Transformer, Visitor
 

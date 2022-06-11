@@ -1,6 +1,6 @@
+from sqltree.api import sqltree
 from sqltree.formatter import transform_and_format
 from sqltree.parser import BinOp, Keyword, Punctuation
-from sqltree.api import sqltree
 from sqltree.visitor import Transformer, walk
 
 
