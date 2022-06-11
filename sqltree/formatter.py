@@ -455,6 +455,9 @@ class Formatter(Visitor[None]):
         # ' is more portable
         self.write(f"'{node.value}'")
 
+    def visit_NullExpression(self, node: p.NullExpression) -> None:
+        self.visit(node.null_kw)
+
     def visit_Star(self, node: p.Star) -> None:
         self.write("*")
 

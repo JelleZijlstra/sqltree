@@ -416,6 +416,10 @@ def test_insert() -> None:
             ON DUPLICATE KEY UPDATE a = VALUES(a)
         """
     )
+    assert (
+        format("INSERT INTO x(a, b) values(1, null)")
+        == "INSERT INTO x(a, b)\nVALUES (1, NULL)\n"
+    )
 
 
 def test_replace() -> None:

@@ -136,6 +136,11 @@ class Placeholder(Expression, Leaf):
 
 
 @dataclass
+class NullExpression(Expression):
+    null_kw: Keyword
+
+
+@dataclass
 class FunctionCall(Expression):
     callee: Expression
     left_paren: Punctuation
@@ -1543,6 +1548,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
         elif token.text == "CASE":
             p.pi.wind_back()
             return _parse_case_expression(p)
+        elif token.text == "NULL":
+            return NullExpression(Keyword(token, token.text))
     raise ParseError.from_unexpected_token(token, "expression")
 
 
