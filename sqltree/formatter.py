@@ -751,6 +751,22 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.db_clause)
         self.maybe_visit(node.like_clause)
 
+    def visit_ChannelClause(self, node: p.ChannelClause) -> None:
+        self.add_space()
+        self.visit(node.for_kw)
+        self.add_space()
+        self.visit(node.channel_kw)
+        self.add_space()
+        self.visit(node.channel)
+
+    def visit_ShowReplicaStatus(self, node: p.ShowReplicaStatus) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        self.visit(node.replica_kw)
+        self.add_space()
+        self.visit(node.status_kw)
+        self.maybe_visit(node.channel_clause)
+
 
 def format_tree(
     tree: p.Node,

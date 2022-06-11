@@ -633,6 +633,21 @@ class ShowTables(Statement):
     like_clause: MaybeClause[Union[LikeClause, WhereClause]]
 
 
+@dataclass
+class ChannelClause(Node):
+    for_kw: Keyword = field(compare=False, repr=False)
+    channel_kw: Keyword = field(compare=False, repr=False)
+    channel: StringLiteral
+
+
+@dataclass
+class ShowReplicaStatus(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    replica_kw: Keyword  # SLAVE or REPLICA
+    status_kw: Keyword = field(compare=False, repr=False)
+    channel_clause: Optional[ChannelClause] = None
+
+
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
     p = Parser(PeekingIterator(list(tokens)), dialect)
     return _parse_statement(p)
@@ -1301,8 +1316,39 @@ def _parse_drop(p: Parser) -> DropTable:
     return DropTable((), drop, temporary, table, if_exists, tables, tail)
 
 
-def _parse_show(p: Parser) -> ShowTables:
+def _parse_string_literal(p: Parser) -> StringLiteral:
+    token = _next_or_else(p, "string literal")
+    if token.typ is not TokenType.string:
+        raise ParseError.from_unexpected_token(token, "string literal")
+    text = token.text[1:-1]
+    if token.text[0] == p.dialect.get_identifier_delimiter():
+        raise ParseError.from_unexpected_token(token, "string literal")
+    return StringLiteral(token, text)
+
+
+def _parse_show(p: Parser) -> Union[ShowTables, ShowReplicaStatus]:
     show = _expect_keyword(p, "SHOW")
+    replica_kw = _maybe_consume_one_of_keywords(p, ["REPLICA", "SLAVE"])
+    if replica_kw is not None:
+        return _parse_show_replica_status(p, show, replica_kw)
+    return _parse_show_tables(p, show)
+
+
+def _parse_show_replica_status(
+    p: Parser, show: Keyword, replica_kw: Keyword
+) -> ShowReplicaStatus:
+    status = _expect_keyword(p, "STATUS")
+    for_kw = _maybe_consume_keyword(p, "FOR")
+    if for_kw is not None:
+        channel = _expect_keyword(p, "CHANNEL")
+        channel_name = _parse_string_literal(p)
+        channel_clause = ChannelClause(for_kw, channel, channel_name)
+    else:
+        channel_clause = None
+    return ShowReplicaStatus((), show, replica_kw, status, channel_clause)
+
+
+def _parse_show_tables(p, show: Keyword) -> ShowTables:
     extended = _maybe_consume_keyword(p, "EXTENDED")
     full = _maybe_consume_keyword(p, "FULL")
     tables = _expect_keyword(p, "TABLES")
@@ -1314,13 +1360,8 @@ def _parse_show(p: Parser) -> ShowTables:
         db_clause = None
     like_kw = _maybe_consume_keyword(p, "LIKE")
     if like_kw is not None:
-        token = _next_or_else(p, "pattern")
-        if token.typ is not TokenType.string:
-            raise ParseError.from_unexpected_token(token, "pattern")
-        text = token.text[1:-1]
-        if token.text[0] == p.dialect.get_identifier_delimiter():
-            raise ParseError.from_unexpected_token(token, "pattern")
-        like_clause = LikeClause(like_kw, StringLiteral(token, text))
+        pattern = _parse_string_literal(p)
+        like_clause = LikeClause(like_kw, pattern)
     else:
         where_kw = _maybe_consume_keyword(p, "WHERE")
         if where_kw is not None:

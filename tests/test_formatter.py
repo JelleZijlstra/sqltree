@@ -497,3 +497,12 @@ def test_show_tables() -> None:
     assert format("show tables in x") == "SHOW TABLES IN x\n"
     assert format("show tables in x like 'y'") == "SHOW TABLES IN x LIKE 'y'\n"
     assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"
+
+
+def test_show_replica_status() -> None:
+    assert format("show replica status") == "SHOW REPLICA STATUS\n"
+    assert format("show slave status") == "SHOW SLAVE STATUS\n"
+    assert (
+        format("show replica status for channel 'x'")
+        == "SHOW REPLICA STATUS FOR CHANNEL 'x'\n"
+    )
