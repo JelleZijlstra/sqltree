@@ -7,9 +7,8 @@ import libcst as cst
 from fixit import CstLintRule, InvalidTestCase as Invalid, ValidTestCase as Valid
 from libcst.helpers import get_full_name_for_node
 
-from sqltree.parser import ParseError
-
 from .formatter import format
+from .parser import ParseError
 
 
 class SqlFormatRule(CstLintRule):

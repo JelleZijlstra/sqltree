@@ -7,9 +7,9 @@ Tools for working with SQL.
 
 from typing import Sequence
 
+from .api import sqltree
 from .dialect import DEFAULT_DIALECT, Dialect
 from .parser import Dotted, Identifier, IntoClause, SimpleTableFactor
-from .sqltree import sqltree
 from .visitor import walk
 
 
