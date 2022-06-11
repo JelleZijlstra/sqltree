@@ -420,3 +420,34 @@ def test_insert() -> None:
 
 def test_replace() -> None:
     assert format("replace into x(a) values(1)") == "REPLACE INTO x(a)\nVALUES (1)\n"
+
+
+def test_start_transaction() -> None:
+    assert format("start transaction") == "START TRANSACTION\n"
+    assert (
+        format("start transaction with consistent snapshot")
+        == "START TRANSACTION WITH CONSISTENT SNAPSHOT\n"
+    )
+    assert (
+        format("start transaction with consistent snapshot, read write")
+        == "START TRANSACTION WITH CONSISTENT SNAPSHOT, READ WRITE\n"
+    )
+
+
+def test_begin() -> None:
+    assert format("begin") == "BEGIN\n"
+    assert format("begin work") == "BEGIN WORK\n"
+
+
+def test_commit() -> None:
+    assert format("commit") == "COMMIT\n"
+    assert format("commit work") == "COMMIT WORK\n"
+    assert format("commit and no chain release") == "COMMIT AND NO CHAIN RELEASE\n"
+    assert format("commit and chain no release") == "COMMIT AND CHAIN NO RELEASE\n"
+
+
+def test_rollback() -> None:
+    assert format("rollback") == "ROLLBACK\n"
+    assert format("rollback work") == "ROLLBACK WORK\n"
+    assert format("rollback and no chain release") == "ROLLBACK AND NO CHAIN RELEASE\n"
+    assert format("rollback and chain no release") == "ROLLBACK AND CHAIN NO RELEASE\n"
