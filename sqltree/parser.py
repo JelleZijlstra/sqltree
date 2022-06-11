@@ -582,6 +582,16 @@ class RollbackStatement(Statement):
     release: Optional[ReleaseClause] = None
 
 
+@dataclass
+class DropTable(Statement):
+    drop_kw: Keyword = field(compare=False, repr=False)
+    temporary_kw: Optional[Keyword]
+    table_kw: Keyword = field(compare=False, repr=False)
+    if_exists: Optional[KeywordSequence]
+    tables: Sequence[WithTrailingComma[Union[Dotted, Identifier]]]
+    tail: Optional[Keyword]
+
+
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
     p = Parser(PeekingIterator(list(tokens)), dialect)
     return _parse_statement(p)
@@ -1240,6 +1250,16 @@ def _parse_rollback(p: Parser) -> RollbackStatement:
     return RollbackStatement((), commit, work, chain, release)
 
 
+def _parse_drop(p: Parser) -> DropTable:
+    drop = _expect_keyword(p, "DROP")
+    temporary = _maybe_consume_keyword(p, "TEMPORARY")
+    table = _expect_keyword(p, "TABLE")
+    if_exists = _maybe_consume_keyword_sequence(p, ["IF", "EXISTS"])
+    tables = _parse_comma_separated(p, _parse_table_name)
+    tail = _maybe_consume_one_of_keywords(p, ["CASCADE", "RESTRICT"])
+    return DropTable((), drop, temporary, table, if_exists, tables, tail)
+
+
 def _parse_cte(p: Parser) -> CommonTableExpression:
     name = _parse_identifier(p)
     col_names = _maybe_parse_col_name_list(p)
@@ -1275,6 +1295,7 @@ _VERB_TO_PARSER = {
     "BEGIN": _parse_begin,
     "COMMIT": _parse_commit,
     "ROLLBACK": _parse_rollback,
+    "DROP": _parse_drop,
 }
 
 

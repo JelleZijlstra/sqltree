@@ -690,6 +690,22 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.chain)
         self.maybe_visit(node.release)
 
+    def visit_DropTable(self, node: p.DropTable) -> None:
+        self.visit(node.drop_kw)
+        self.add_space()
+        if node.temporary_kw is not None:
+            self.visit(node.temporary_kw)
+            self.add_space()
+        self.visit(node.table_kw)
+        self.add_space()
+        if node.if_exists is not None:
+            self.visit(node.if_exists)
+            self.add_space()
+        self.write_comma_list(node.tables)
+        if node.tail is not None:
+            self.add_space()
+            self.visit(node.tail)
+
 
 def format_tree(
     tree: p.Node,
