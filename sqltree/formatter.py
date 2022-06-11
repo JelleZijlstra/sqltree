@@ -724,7 +724,7 @@ class Formatter(Visitor[None]):
         setattr(type(self), func_name, func)
 
 
-def _get_origin_args(obj: Any) -> Tuple[object, Tuple[object, ...]]:
+def _get_origin_args(obj: Any) -> Tuple[object, Sequence[object]]:
     if sys.version_info >= (3, 8):
         return typing.get_origin(obj), typing.get_args(obj)
     elif sys.version_info >= (3, 7):
