@@ -521,6 +521,18 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(node.right)
 
+    def visit_UnaryOp(self, node: p.UnaryOp) -> None:
+        self.visit(node.op)
+        if not isinstance(
+            node.expr,
+            (p.Leaf, p.Parenthesized, p.Subselect, p.NullExpression, p.FunctionCall),
+        ):
+            self.write("(")
+            self.visit(node.expr)
+            self.write(")")
+        else:
+            self.visit(node.expr)
+
     def visit_BinOp_multiline(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()
         self.force_indentation()
