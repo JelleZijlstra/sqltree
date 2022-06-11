@@ -74,7 +74,11 @@ NodeT = TypeVar("NodeT", bound=Node, covariant=True)
 
 
 class Clause(Node):
-    pass
+    """Base class for SQL "clauses", like WHERE.
+
+    By default, the formatter puts these on a new line.
+
+    """
 
 
 @dataclass
