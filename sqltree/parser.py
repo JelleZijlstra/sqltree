@@ -413,6 +413,19 @@ class Select(Statement):
 
 
 @dataclass
+class UnionEntry(Node):
+    union_kw: Keyword = field(compare=False, repr=False)
+    all_kw: Optional[Keyword]
+    select: Select
+
+
+@dataclass
+class UnionStatement(Statement):
+    first: Select
+    others: Sequence[UnionEntry]
+
+
+@dataclass
 class UsingClause(Node):
     kw: Keyword = field(compare=False, repr=False)
     tables: Sequence[WithTrailingComma[Identifier]]
@@ -932,7 +945,25 @@ def _parse_delete(p: Parser) -> Delete:
     )
 
 
-def _parse_select(p: Parser) -> Select:
+def _parse_select(p: Parser) -> Union[Select, UnionStatement]:
+    select_stmt = _parse_single_select(p)
+    if not _next_is_keyword(p, "UNION"):
+        return select_stmt
+    rest = []
+    while _next_is_keyword(p, "UNION"):
+        union_kw = _expect_keyword(p, "UNION")
+        if _next_is_keyword(p, "ALL"):
+            kw = _expect_keyword(p, "ALL")
+        elif _next_is_keyword(p, "DISTINCT"):
+            kw = _expect_keyword(p, "DISTINCT")
+        else:
+            kw = None
+        next_select = _parse_single_select(p)
+        rest.append(UnionEntry(union_kw, kw, next_select))
+    return UnionStatement((), select_stmt, rest)
+
+
+def _parse_single_select(p: Parser) -> Select:
     if p.dialect.supports_feature(Feature.with_clause) and _next_is_keyword(p, "WITH"):
         with_clause = _parse_with_clause(p)
     else:

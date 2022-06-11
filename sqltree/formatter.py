@@ -353,6 +353,19 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
 
+    def visit_UnionStatement(self, node: p.UnionStatement) -> None:
+        self.visit(node.first)
+        for entry in node.others:
+            self.visit(entry)
+
+    def visit_UnionEntry(self, node: p.UnionEntry) -> None:
+        self.start_new_line()
+        self.visit(node.union_kw)
+        if node.all_kw:
+            self.add_space()
+            self.visit(node.all_kw)
+        self.visit(node.select)
+
     def visit_Delete(self, node: p.Delete) -> None:
         self.maybe_visit(node.with_clause)
         self.start_new_line()
