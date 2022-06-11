@@ -751,6 +751,22 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.db_clause)
         self.maybe_visit(node.like_clause)
 
+    def visit_ShowTriggers(self, node: p.ShowTriggers) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        self.visit(node.triggers_kw)
+        self.maybe_visit(node.db_clause)
+        self.maybe_visit(node.like_clause)
+
+    def visit_ShowTableStatus(self, node: p.ShowTableStatus) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        self.visit(node.table_kw)
+        self.add_space()
+        self.visit(node.status_kw)
+        self.maybe_visit(node.db_clause)
+        self.maybe_visit(node.like_clause)
+
     def visit_ChannelClause(self, node: p.ChannelClause) -> None:
         self.add_space()
         self.visit(node.for_kw)
@@ -766,6 +782,31 @@ class Formatter(Visitor[None]):
         self.add_space()
         self.visit(node.status_kw)
         self.maybe_visit(node.channel_clause)
+
+    def visit_ShowVariables(self, node: p.ShowVariables) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        if node.modifier is not None:
+            self.visit(node.modifier)
+            self.add_space()
+        self.visit(node.variables_kw)
+        self.maybe_visit(node.like_clause)
+
+    def visit_ShowWarnErrorCount(self, node: p.ShowWarnErrorCount) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        self.visit(node.count_kw)
+        self.visit(node.left_paren)
+        self.visit(node.star)
+        self.visit(node.right_paren)
+        self.add_space()
+        self.visit(node.kind)
+
+    def visit_ShowWarnError(self, node: p.ShowWarnError) -> None:
+        self.visit(node.show_kw)
+        self.add_space()
+        self.visit(node.kind)
+        self.maybe_visit(node.limit_clause)
 
 
 def format_tree(

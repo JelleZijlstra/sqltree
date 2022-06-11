@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field, replace
 from typing import (
     Callable,
+    Dict,
     Generic,
     Iterable,
     NoReturn,
@@ -623,6 +624,9 @@ class LikeClause(Node):
     pattern: StringLiteral
 
 
+LikeOrWhere = MaybeClause[Union[LikeClause, WhereClause]]
+
+
 @dataclass
 class ShowTables(Statement):
     show_kw: Keyword = field(compare=False, repr=False)
@@ -630,7 +634,24 @@ class ShowTables(Statement):
     full_kw: Optional[Keyword]
     tables_kw: Keyword = field(compare=False, repr=False)
     db_clause: MaybeClause[DatabaseClause]
-    like_clause: MaybeClause[Union[LikeClause, WhereClause]]
+    like_clause: LikeOrWhere
+
+
+@dataclass
+class ShowTableStatus(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    table_kw: Keyword = field(compare=False, repr=False)
+    status_kw: Keyword = field(compare=False, repr=False)
+    db_clause: MaybeClause[DatabaseClause]
+    like_clause: LikeOrWhere
+
+
+@dataclass
+class ShowTriggers(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    triggers_kw: Keyword = field(compare=False, repr=False)
+    db_clause: MaybeClause[DatabaseClause]
+    like_clause: LikeOrWhere
 
 
 @dataclass
@@ -648,15 +669,40 @@ class ShowReplicaStatus(Statement):
     channel_clause: Optional[ChannelClause] = None
 
 
+@dataclass
+class ShowVariables(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    modifier: Optional[Keyword]  # GLOBAL or SESSION
+    variables_kw: Keyword = field(compare=False, repr=False)
+    like_clause: LikeOrWhere
+
+
+@dataclass
+class ShowWarnErrorCount(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    count_kw: Keyword = field(compare=False, repr=False)
+    left_paren: Punctuation
+    star: Punctuation
+    right_paren: Punctuation
+    kind: Keyword  # WARNINGS or ERRORS
+
+
+@dataclass
+class ShowWarnError(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    kind: Keyword  # WARNINGS or ERRORS
+    limit_clause: MaybeClause[SelectLimitClause]
+
+
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
     p = Parser(PeekingIterator(list(tokens)), dialect)
     return _parse_statement(p)
 
 
-def _assert_done(p: Parser) -> None:
+def _assert_done(p: Parser, expected: str = "EOF") -> None:
     remaining = p.pi.peek_or_raise()
     if remaining.typ is not TokenType.eof:
-        raise ParseError.from_unexpected_token(remaining, "EOF")
+        raise ParseError.from_unexpected_token(remaining, expected)
 
 
 def _parse_statement(p: Parser) -> Statement:
@@ -1326,17 +1372,10 @@ def _parse_string_literal(p: Parser) -> StringLiteral:
     return StringLiteral(token, text)
 
 
-def _parse_show(p: Parser) -> Union[ShowTables, ShowReplicaStatus]:
-    show = _expect_keyword(p, "SHOW")
-    replica_kw = _maybe_consume_one_of_keywords(p, ["REPLICA", "SLAVE"])
-    if replica_kw is not None:
-        return _parse_show_replica_status(p, show, replica_kw)
-    return _parse_show_tables(p, show)
-
-
 def _parse_show_replica_status(
-    p: Parser, show: Keyword, replica_kw: Keyword
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
 ) -> ShowReplicaStatus:
+    _assert_done(modifiers_p, "no modifiers")
     status = _expect_keyword(p, "STATUS")
     for_kw = _maybe_consume_keyword(p, "FOR")
     if for_kw is not None:
@@ -1345,31 +1384,124 @@ def _parse_show_replica_status(
         channel_clause = ChannelClause(for_kw, channel, channel_name)
     else:
         channel_clause = None
-    return ShowReplicaStatus((), show, replica_kw, status, channel_clause)
+    return ShowReplicaStatus((), show, kind_kw, status, channel_clause)
 
 
-def _parse_show_tables(p, show: Keyword) -> ShowTables:
-    extended = _maybe_consume_keyword(p, "EXTENDED")
-    full = _maybe_consume_keyword(p, "FULL")
-    tables = _expect_keyword(p, "TABLES")
-    db_kw = _maybe_consume_one_of_keywords(p, ["FROM", "IN"])
-    if db_kw is not None:
-        db = _parse_identifier(p)
-        db_clause = DatabaseClause(db_kw, db)
-    else:
-        db_clause = None
+def _parse_like_or_where(p: Parser) -> Optional[LikeOrWhere]:
     like_kw = _maybe_consume_keyword(p, "LIKE")
     if like_kw is not None:
         pattern = _parse_string_literal(p)
-        like_clause = LikeClause(like_kw, pattern)
+        return LikeClause(like_kw, pattern)
+    where_kw = _maybe_consume_keyword(p, "WHERE")
+    if where_kw is not None:
+        expr = _parse_expression(p)
+        return WhereClause(where_kw, expr)
+    return None
+
+
+def _parse_db_clause(p: Parser) -> Optional[DatabaseClause]:
+    db_kw = _maybe_consume_one_of_keywords(p, ["FROM", "IN"])
+    if db_kw is not None:
+        db = _parse_identifier(p)
+        return DatabaseClause(db_kw, db)
     else:
-        where_kw = _maybe_consume_keyword(p, "WHERE")
-        if where_kw is not None:
-            expr = _parse_expression(p)
-            like_clause = WhereClause(where_kw, expr)
-        else:
-            like_clause = None
-    return ShowTables((), show, extended, full, tables, db_clause, like_clause)
+        return None
+
+
+def _parse_show_tables(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowTables:
+    extended = _maybe_consume_keyword(modifiers_p, "EXTENDED")
+    full = _maybe_consume_keyword(modifiers_p, "FULL")
+    _assert_done(modifiers_p, "EXTENDED or FULL")
+    db_clause = _parse_db_clause(p)
+    like_clause = _parse_like_or_where(p)
+    return ShowTables((), show, extended, full, kind_kw, db_clause, like_clause)
+
+
+def _parse_show_table_status(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowTableStatus:
+    _assert_done(modifiers_p, "no modifiers")
+    status_kw = _expect_keyword(p, "STATUS")
+    db_clause = _parse_db_clause(p)
+    like_clause = _parse_like_or_where(p)
+    return ShowTableStatus((), show, kind_kw, status_kw, db_clause, like_clause)
+
+
+def _parse_show_triggers(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowTriggers:
+    _assert_done(modifiers_p, "no modifiers")
+    db_clause = _parse_db_clause(p)
+    like_clause = _parse_like_or_where(p)
+    return ShowTriggers((), show, kind_kw, db_clause, like_clause)
+
+
+def _parse_show_variables(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowVariables:
+    modifier = _maybe_consume_one_of_keywords(modifiers_p, ["GLOBAL", "SESSION"])
+    _assert_done(modifiers_p, "GLOBAL or SESSION")
+    like_clause = _parse_like_or_where(p)
+    return ShowVariables((), show, modifier, kind_kw, like_clause)
+
+
+def _parse_show_count(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowWarnErrorCount:
+    _assert_done(modifiers_p, "no modifiers")
+    left_paren = _expect_punctuation(p, "(")
+    star = _expect_punctuation(p, "*")
+    right_paren = _expect_punctuation(p, ")")
+    kind = _expect_one_of_keywords(p, ["ERRORS", "WARNINGS"])
+    return ShowWarnErrorCount((), show, kind_kw, left_paren, star, right_paren, kind)
+
+
+def _parse_show_warnings_or_errors(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowWarnError:
+    _assert_done(modifiers_p, "no modifiers")
+    limit_clause = _parse_select_limit_clause(p)
+    return ShowWarnError((), show, kind_kw, limit_clause)
+
+
+_MODIFIERS = [
+    "EXTENDED",  # TABLES
+    "FULL",  # TABLES
+    "GLOBAL",  # VARIABLES
+    "SESSION",  # VARIABLES
+]
+_ShowParser = Callable[[Parser, Keyword, Parser, Keyword], Statement]
+_SHOW_KIND_TO_PARSER: Dict[str, _ShowParser] = {
+    "REPLICA": _parse_show_replica_status,
+    "SLAVE": _parse_show_replica_status,
+    "TABLES": _parse_show_tables,
+    "TABLE": _parse_show_table_status,
+    "TRIGGERS": _parse_show_triggers,
+    "VARIABLES": _parse_show_variables,
+    "COUNT": _parse_show_count,
+    "WARNINGS": _parse_show_warnings_or_errors,
+    "ERRORS": _parse_show_warnings_or_errors,
+}
+_SHOW_KINDS = list(_SHOW_KIND_TO_PARSER)
+_EOF = Token(TokenType.eof, "", Location("", 0, 0))
+
+
+def _parse_show(p: Parser) -> Statement:
+    show = _expect_keyword(p, "SHOW")
+    modifiers = []
+    while True:
+        modifier = _maybe_consume_one_of_keywords(p, _MODIFIERS)
+        if modifier is None:
+            break
+        modifiers.append(modifier)
+    kind_kw = _expect_one_of_keywords(p, _SHOW_KINDS)
+    parser = _SHOW_KIND_TO_PARSER[kind_kw.text.upper()]
+    modifiers_parser = Parser(
+        PeekingIterator([*[modifier.token for modifier in modifiers], _EOF]), p.dialect
+    )
+    return parser(p, show, modifiers_parser, kind_kw)
 
 
 def _parse_cte(p: Parser) -> CommonTableExpression:
@@ -1734,6 +1866,15 @@ def _expect_keyword(p: Parser, keyword: str) -> Keyword:
     if not _token_is_keyword(p, token, keyword):
         raise ParseError.from_unexpected_token(token, repr(keyword))
     return Keyword(token, token.text)
+
+
+def _expect_one_of_keywords(p: Parser, keywords: Sequence[str]) -> Keyword:
+    expected = "one of " + ", ".join(keywords)
+    token = _next_or_else(p, expected)
+    for keyword in keywords:
+        if _token_is_keyword(p, token, keyword):
+            return Keyword(token, token.text)
+    raise ParseError.from_unexpected_token(token, expected)
 
 
 def _maybe_consume_keyword(p: Parser, keyword: str) -> Optional[Keyword]:
