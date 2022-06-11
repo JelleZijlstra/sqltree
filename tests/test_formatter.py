@@ -203,6 +203,12 @@ def test_expression():
     )
     assert format("select -1 + 1") == "SELECT -1 + 1\n"
     assert format("select -~1") == "SELECT -(~1)\n"
+    assert format("select x where y is null") == "SELECT x\nWHERE y IS NULL\n"
+    assert format("select x where y is not null") == "SELECT x\nWHERE y IS NOT NULL\n"
+    assert (
+        format("select x where left(y, 5) = 'x'")
+        == "SELECT x\nWHERE LEFT(y, 5) = 'x'\n"
+    )
 
 
 def test_union() -> None:

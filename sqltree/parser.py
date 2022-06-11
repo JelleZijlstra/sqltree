@@ -1473,10 +1473,6 @@ def _parse_in_rhs(p: Parser) -> Expression:
     return ExprList(left, exprs, right)
 
 
-# Keywords that support function-like syntax
-KEYWORD_FUNCTIONS = {"VALUES"}
-
-
 def _parse_function_call(p: Parser, callee: Expression) -> FunctionCall:
     left_paren = _expect_punctuation(p, "(")
     args = []
@@ -1565,14 +1561,14 @@ def _parse_simple_expression(p: Parser) -> Expression:
         else:
             return StringLiteral(token, text)
     elif token.typ is TokenType.keyword:
-        if token.text in KEYWORD_FUNCTIONS:
-            kw = Keyword(token, token.text)
-            return _parse_function_call(p, KeywordIdentifier(kw))
-        elif token.text == "CASE":
+        if token.text == "CASE":
             p.pi.wind_back()
             return _parse_case_expression(p)
         elif token.text == "NULL":
             return NullExpression(Keyword(token, token.text))
+        elif _next_is_punctuation(p, "("):
+            kw = Keyword(token, token.text)
+            return _parse_function_call(p, KeywordIdentifier(kw))
     raise ParseError.from_unexpected_token(token, "expression")
 
 
