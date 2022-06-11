@@ -436,6 +436,11 @@ class Formatter(Visitor[None]):
         else:
             self.write(node.text)
 
+    def visit_DottedTable(self, node: p.DottedTable) -> None:
+        self.visit(node.left)
+        self.visit(node.dot)
+        self.visit(node.right)
+
     def visit_Dotted(self, node: p.Dotted) -> None:
         self.visit(node.left)
         self.visit(node.dot)
