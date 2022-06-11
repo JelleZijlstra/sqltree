@@ -497,3 +497,63 @@ def test_show_tables() -> None:
     assert format("show tables in x") == "SHOW TABLES IN x\n"
     assert format("show tables in x like 'y'") == "SHOW TABLES IN x LIKE 'y'\n"
     assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"
+
+
+def test_show_triggers() -> None:
+    assert format("show triggers") == "SHOW TRIGGERS\n"
+    assert format("show triggers in x") == "SHOW TRIGGERS IN x\n"
+    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS IN x LIKE 'y'\n"
+    assert (
+        format("show triggers in x where z = 3") == "SHOW TRIGGERS IN x\nWHERE z = 3\n"
+    )
+
+
+def test_show_table_status() -> None:
+    assert format("show table status") == "SHOW TABLE STATUS\n"
+    assert format("show table status in x") == "SHOW TABLE STATUS IN x\n"
+    assert (
+        format("show table status in x like 'y'") == "SHOW TABLE STATUS IN x LIKE 'y'\n"
+    )
+    assert (
+        format("show table status in x where z = 3")
+        == "SHOW TABLE STATUS IN x\nWHERE z = 3\n"
+    )
+
+
+def test_show_replica_status() -> None:
+    assert format("show replica status") == "SHOW REPLICA STATUS\n"
+    assert format("show slave status") == "SHOW SLAVE STATUS\n"
+    assert (
+        format("show replica status for channel 'x'")
+        == "SHOW REPLICA STATUS FOR CHANNEL 'x'\n"
+    )
+
+    assert format("show slave hosts") == "SHOW SLAVE HOSTS\n"
+    assert format("show replicas") == "SHOW REPLICAS\n"
+
+
+def test_show_variables() -> None:
+    assert format("show variables") == "SHOW VARIABLES\n"
+    assert (
+        format("show global variables where x = 3")
+        == "SHOW GLOBAL VARIABLES\nWHERE x = 3\n"
+    )
+    assert (
+        format("show session variables like 'x'") == "SHOW SESSION VARIABLES LIKE 'x'\n"
+    )
+
+
+def test_show_status() -> None:
+    assert format("show status") == "SHOW STATUS\n"
+    assert (
+        format("show global status where x = 3") == "SHOW GLOBAL STATUS\nWHERE x = 3\n"
+    )
+    assert format("show session status like 'x'") == "SHOW SESSION STATUS LIKE 'x'\n"
+
+
+def test_show_warnings() -> None:
+    assert format("show warnings") == "SHOW WARNINGS\n"
+    assert format("show errors") == "SHOW ERRORS\n"
+    assert format("show count(*) warnings") == "SHOW COUNT(*) WARNINGS\n"
+    assert format("show warnings limit 3") == "SHOW WARNINGS\nLIMIT 3\n"
+    assert format("show warnings limit 1, 3") == "SHOW WARNINGS\nLIMIT 3 OFFSET 1\n"
