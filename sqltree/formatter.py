@@ -250,9 +250,17 @@ class Formatter(Visitor[None]):
         self.write_comma_list(node.col_names, with_space=False)
         self.visit(node.close_paren)
 
-    def visit_Subselect(self, node: p.Subselect) -> None:
+    def visit_Subselect(
+        self, node: p.Subselect, *, always_parenthesize: bool = False
+    ) -> None:
         if node.left_paren is None:
-            self.visit(node.select)
+            if always_parenthesize:
+                self.write("(")
+                with self.add_indent():
+                    self.visit(node.select)
+                self.write(")")
+            else:
+                self.visit(node.select)
         else:
             self.visit(node.left_paren)
             with self.add_indent():
@@ -354,17 +362,18 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.limit)
 
     def visit_UnionStatement(self, node: p.UnionStatement) -> None:
-        self.visit(node.first)
+        always_parens = bool(node.order_by or node.limit)
+        self.visit_Subselect(node.first, always_parenthesize=always_parens)
         for entry in node.others:
-            self.visit(entry)
-
-    def visit_UnionEntry(self, node: p.UnionEntry) -> None:
-        self.start_new_line()
-        self.visit(node.union_kw)
-        if node.all_kw:
-            self.add_space()
-            self.visit(node.all_kw)
-        self.visit(node.select)
+            self.start_new_line()
+            self.visit(entry.union_kw)
+            if entry.all_kw:
+                self.add_space()
+                self.visit(entry.all_kw)
+            self.start_new_line()
+            self.visit_Subselect(entry.select, always_parenthesize=always_parens)
+        self.maybe_visit(node.order_by)
+        self.maybe_visit(node.limit)
 
     def visit_Delete(self, node: p.Delete) -> None:
         self.maybe_visit(node.with_clause)
