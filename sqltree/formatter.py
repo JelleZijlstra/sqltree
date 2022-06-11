@@ -1,6 +1,7 @@
 import argparse
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields
+import sys
 from typing import (
     Any,
     Dict,
@@ -13,6 +14,7 @@ from typing import (
     Type,
     Union,
 )
+import typing
 
 from . import parser as p
 from .api import sqltree
@@ -680,12 +682,10 @@ class Formatter(Visitor[None]):
         for i, field_obj in enumerate(fields(typ)):
             if is_statement and field_obj.name == "leading_comments":
                 continue
-            if (
-                hasattr(field_obj.type, "__origin__")
-                and field_obj.type.__origin__ is Union
-            ):
-                is_optional = NoneType in field_obj.type.__args__
-                types = {t for t in field_obj.type.__args__ if t is not NoneType}
+            origin, args = _get_origin_args(field_obj.type)
+            if origin is Union:
+                is_optional = NoneType in args
+                types = {t for t in args if t is not NoneType}
             else:
                 is_optional = False
                 types = {field_obj.type}
@@ -722,6 +722,20 @@ class Formatter(Visitor[None]):
         func = ns[func_name]
         func(self, node)
         setattr(type(self), func_name, func)
+
+
+def _get_origin_args(obj: Any) -> Tuple[object, Tuple[object, ...]]:
+    if sys.version_info >= (3, 8):
+        return typing.get_origin(obj), typing.get_args(obj)
+    elif sys.version_info >= (3, 7):
+        if hasattr(obj, "__origin__"):
+            return obj.__origin__, obj.__args__
+        return None, ()
+    else:
+        if hasattr(obj, "_subs_tree"):
+            origin, *args = obj._subs_tree()
+            return origin, args
+        return None, ()
 
 
 def format_tree(
