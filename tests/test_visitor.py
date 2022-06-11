@@ -1,6 +1,7 @@
 from sqltree.formatter import transform_and_format
-from sqltree.parser import BinOp, Punctuation
-from sqltree.visitor import Transformer
+from sqltree.parser import BinOp, Keyword, Punctuation
+from sqltree.sqltree import sqltree
+from sqltree.visitor import Transformer, walk
 
 
 class FlipConditions(Transformer):
@@ -17,3 +18,16 @@ def test_transform() -> None:
         transform_and_format("SELECT * FROM x WHERE a = 3", FlipConditions())
         == "SELECT *\nFROM x\nWHERE a != 3\n"
     )
+
+
+def test_walk() -> None:
+    sql = "SELECT * FROM x WHERE a = 3"
+    tree = sqltree(sql)
+    nodes = list(walk(tree))
+    assert any(isinstance(node, Punctuation) and node.text == "=" for node in nodes)
+    assert any(isinstance(node, Keyword) and node.text == "WHERE" for node in nodes)
+    assert {node.text for node in nodes if isinstance(node, Keyword)} == {
+        "SELECT",
+        "FROM",
+        "WHERE",
+    }
