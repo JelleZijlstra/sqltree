@@ -142,8 +142,11 @@ class StringLiteral(Expression, Leaf):
 
 
 @dataclass
-class IntegerLiteral(Expression, Leaf):
-    value: int
+class NumericLiteral(Expression, Leaf):
+    # We just store the value as a string so we don't
+    # have to worry about the exact semantics of different
+    # kinds of numbers.
+    value: str
 
 
 @dataclass
@@ -1824,7 +1827,7 @@ def _parse_simple_expression(p: Parser) -> Expression:
         expr = Identifier(token, token.text)
         return _parse_identifier_expression(p, expr)
     elif token.typ is TokenType.number:
-        return IntegerLiteral(token, int(token.text))
+        return NumericLiteral(token, token.text)
     elif token.typ is TokenType.placeholder:
         return Placeholder(token, token.text)
     elif token.typ is TokenType.string:
