@@ -668,6 +668,11 @@ class Formatter(Visitor[None]):
         else:
             self.write_comma_list(node.option)
 
+    def visit_LikeTable(self, node: p.LikeTable) -> None:
+        self.visit(node.like_kw)
+        self.add_space()
+        self.visit(node.table)
+
     def generic_visit(self, node: p.Node) -> None:
         """For unhandled nodes, we try to generate the formatter."""
         typ = type(node)
@@ -735,6 +740,8 @@ def _get_lines_for_field(
             p.CharType,
             p.CharsetInfo,
             p.Placeholder,
+            p.LikeTable,
+            p.ParenthesizedLikeTable,
         }
         and not last_was_paren
     ):
