@@ -675,6 +675,32 @@ class DropTable(Statement):
 
 
 @dataclass
+class LikeTable(Node):
+    like_kw: Keyword = field(compare=False, repr=False)
+    table: TableName
+
+
+@dataclass
+class ParenthesizedLikeTable(Node):
+    left_paren: Punctuation
+    like_table: LikeTable
+    right_paren: Punctuation
+
+
+CreateTableDefinition = Union[LikeTable, ParenthesizedLikeTable]
+
+
+@dataclass
+class CreateTable(Statement):
+    create_kw: Keyword = field(compare=False, repr=False)
+    temporary_kw: Optional[Keyword]
+    table_kw: Keyword = field(compare=False, repr=False)
+    if_not_exists: Optional[KeywordSequence]
+    table_name: TableName
+    definition: CreateTableDefinition
+
+
+@dataclass
 class Truncate(Statement):
     truncate_kw: Keyword = field(compare=False, repr=False)
     table_kw: Optional[Keyword]
@@ -1858,6 +1884,30 @@ def _parse_truncate(p: Parser) -> Truncate:
     return Truncate((), kw, table_kw, table)
 
 
+def _parse_create(p: Parser) -> CreateTable:
+    kw = _expect_keyword(p, "CREATE")
+    temporary = _maybe_consume_keyword(p, "TEMPORARY")
+    table_kw = _expect_keyword(p, "TABLE")
+    kwseq = _maybe_consume_keyword_sequence(p, ["IF", "NOT", "EXISTS"])
+    name = _parse_table_name(p)
+    # We skip all the other options in the full CREATE TABLE statement. It's
+    # quite complicated:
+    # https://dev.mysql.com/doc/refman/8.0/en/create-table.html
+    like_kw = _maybe_consume_keyword(p, "LIKE")
+    if like_kw is not None:
+        like_table = _parse_table_name(p)
+        defn = LikeTable(like_kw, like_table)
+    else:
+        left_paren = _expect_punctuation(p, "(")
+        like_kw = _expect_keyword(p, "LIKE")
+        like_table = _parse_table_name(p)
+        right_paren = _expect_punctuation(p, ")")
+        defn = ParenthesizedLikeTable(
+            left_paren, LikeTable(like_kw, like_table), right_paren
+        )
+    return CreateTable((), kw, temporary, table_kw, kwseq, name, defn)
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
@@ -1876,6 +1926,7 @@ _VERB_TO_PARSER = {
     "DESC": _parse_explain,
     "FLUSH": _parse_flush,
     "TRUNCATE": _parse_truncate,
+    "CREATE": _parse_create,
 }
 
 
