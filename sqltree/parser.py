@@ -1869,7 +1869,7 @@ def P(text: str) -> Tuple[TokenType, str]:
 
 _BINOP_PRECEDENCE = [
     (P("^"),),
-    (P("*"), P("/"), P("DIV"), P("%"), P("MOD")),
+    (P("*"), P("/"), P("DIV"), P("%"), P("%%"), P("MOD")),
     (P("-"), P("+")),
     (P("<<"), P(">>")),
     (P("&"),),
