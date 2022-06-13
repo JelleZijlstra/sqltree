@@ -450,8 +450,8 @@ class Formatter(Visitor[None]):
         self.start_new_line()
         self.visit(node.placeholder)
 
-    def visit_IntegerLiteral(self, node: p.IntegerLiteral) -> None:
-        self.write(str(node.value))
+    def visit_NumericLiteral(self, node: p.NumericLiteral) -> None:
+        self.write(node.value)
 
     def visit_StringLiteral(self, node: p.StringLiteral) -> None:
         # ' is more portable

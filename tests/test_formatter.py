@@ -211,6 +211,14 @@ def test_expression():
     )
 
 
+def test_literals() -> None:
+    assert format("select 'x'") == "SELECT 'x'\n"
+    assert format('select "x"') == "SELECT 'x'\n"
+    assert format("select 1") == "SELECT 1\n"
+    assert format("select 1.0") == "SELECT 1.0\n"
+    assert format("select 1.0e10") == "SELECT 1.0e10\n"
+
+
 def test_union() -> None:
     assert (
         format("select x from y union select x from z")

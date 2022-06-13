@@ -51,15 +51,15 @@ def test() -> None:
                         p.Punctuation(T, "="),
                         p.BinOp(
                             p.BinOp(
-                                p.IntegerLiteral(T, 3),
+                                p.NumericLiteral(T, "3"),
                                 p.Punctuation(T, "*"),
-                                p.IntegerLiteral(T, 3),
+                                p.NumericLiteral(T, "3"),
                             ),
                             p.Punctuation(T, "+"),
                             p.BinOp(
-                                p.IntegerLiteral(T, 2),
+                                p.NumericLiteral(T, "2"),
                                 p.Punctuation(T, "*"),
-                                p.IntegerLiteral(T, 4),
+                                p.NumericLiteral(T, "4"),
                             ),
                         ),
                     ),

@@ -134,10 +134,18 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                         f" {continuations})"
                     )
         elif char.isnumeric():
-            # TODO floats, hex, other kinds of numbers?
+            # TODO hex, other kinds of numbers?
             pi.wind_back()
             token_type = TokenType.number
             text = _consume_integer(pi)
+            char = pi.peek()
+            if char == ".":
+                pi.next()
+                text += "." + _consume_integer(pi)
+            char = pi.peek()
+            if char == "e" or char == "E":
+                pi.next()
+                text += "e" + _consume_integer(pi)
         elif char in QUOTATIONS:
             token_type = TokenType.string
             text = char + _consume_until(pi, char)
