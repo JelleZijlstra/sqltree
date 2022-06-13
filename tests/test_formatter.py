@@ -210,6 +210,11 @@ def test_expression():
         == "SELECT x\nWHERE LEFT(y, 5) = 'x'\n"
     )
 
+    assert format("select 2 > 1") == "SELECT 2 > 1\n"
+    assert format("select 2 % 1") == "SELECT 2 % 1\n"
+    # We allow this in conjunction with %s substitution.
+    assert format("select 2 %% 1") == "SELECT 2 %% 1\n"
+
     assert format("select binary 'x'") == "SELECT BINARY 'x'\n"
 
 

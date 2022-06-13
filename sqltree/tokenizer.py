@@ -47,7 +47,6 @@ PUNCTUATION = {
     "<>",
     "!=",
     "/",
-    "%",
     "-",
     "~",
     "&",
@@ -57,6 +56,7 @@ PUNCTUATION = {
     "<<",
     "&&",
     "||",
+    "%%",  # Not SQL but we allow it so you can do %s substitution
     "--",  # Not a punctuation but a comment
     "/*",  # Also a comment
 }
@@ -89,6 +89,10 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             if next_char is not None and next_char.isalpha():
                 token_type = TokenType.placeholder
                 text = "%" + _consume_identifier(pi)
+            elif next_char == "%":
+                pi.next()
+                token_type = TokenType.punctuation
+                text = "%%"
             else:
                 token_type = TokenType.punctuation
                 text = "%"
