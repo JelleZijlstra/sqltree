@@ -238,6 +238,59 @@ def test_expression():
     assert format("select binary 'x'") == "SELECT BINARY 'x'\n"
 
 
+def test_cast() -> None:
+    assert format("select cast(1 as binary)") == "SELECT CAST(1 AS BINARY)\n"
+    assert format("select cast(1 as binary(5))") == "SELECT CAST(1 AS BINARY(5))\n"
+    assert (
+        format("select cast(1 as binary(5) array)")
+        == "SELECT CAST(1 AS BINARY(5) ARRAY)\n"
+    )
+    assert format("select cast(1 as char)") == "SELECT CAST(1 AS CHAR)\n"
+    assert format("select cast(1 as char(5))") == "SELECT CAST(1 AS CHAR(5))\n"
+    assert format("select cast(1 as char ascii)") == "SELECT CAST(1 AS CHAR ASCII)\n"
+    assert (
+        format("select cast(1 as char unicode)") == "SELECT CAST(1 AS CHAR UNICODE)\n"
+    )
+    assert (
+        format("select cast(1 as char(5) ascii)") == "SELECT CAST(1 AS CHAR(5) ASCII)\n"
+    )
+    assert (
+        format("select cast(1 as char(5) character set latin1)")
+        == "SELECT CAST(1 AS CHAR(5) CHARACTER SET latin1)\n"
+    )
+    assert (
+        format("select cast(1 as char(5) character set 'latin1')")
+        == "SELECT CAST(1 AS CHAR(5) CHARACTER SET 'latin1')\n"
+    )
+    assert format("select cast(1 as date)") == "SELECT CAST(1 AS DATE)\n"
+    assert format("select cast(1 as datetime)") == "SELECT CAST(1 AS DATETIME)\n"
+    assert format("select cast(1 as datetime(6))") == "SELECT CAST(1 AS DATETIME(6))\n"
+    assert format("select cast(1 as decimal(6))") == "SELECT CAST(1 AS DECIMAL(6))\n"
+    assert (
+        format("select cast(1 as decimal(6, 7))") == "SELECT CAST(1 AS DECIMAL(6, 7))\n"
+    )
+    assert format("select cast(1 as double)") == "SELECT CAST(1 AS DOUBLE)\n"
+    assert format("select cast(1 as float)") == "SELECT CAST(1 AS FLOAT)\n"
+    assert format("select cast(1 as float(3))") == "SELECT CAST(1 AS FLOAT(3))\n"
+    assert format("select cast(1 as json)") == "SELECT CAST(1 AS JSON)\n"
+    assert format("select cast(1 as nchar)") == "SELECT CAST(1 AS NCHAR)\n"
+    assert format("select cast(1 as nchar(5))") == "SELECT CAST(1 AS NCHAR(5))\n"
+    assert format("select cast(1 as real)") == "SELECT CAST(1 AS REAL)\n"
+    assert format("select cast(1 as signed)") == "SELECT CAST(1 AS SIGNED)\n"
+    assert (
+        format("select cast(1 as signed integer)")
+        == "SELECT CAST(1 AS SIGNED INTEGER)\n"
+    )
+    assert format("select cast(1 as time)") == "SELECT CAST(1 AS TIME)\n"
+    assert format("select cast(1 as time(6))") == "SELECT CAST(1 AS TIME(6))\n"
+    assert format("select cast(1 as unsigned)") == "SELECT CAST(1 AS UNSIGNED)\n"
+    assert (
+        format("select cast(1 as unsigned integer)")
+        == "SELECT CAST(1 AS UNSIGNED INTEGER)\n"
+    )
+    assert format("select cast(1 as year)") == "SELECT CAST(1 AS YEAR)\n"
+
+
 def test_literals() -> None:
     assert format("select 'x'") == "SELECT 'x'\n"
     assert format('select "x"') == "SELECT 'x'\n"

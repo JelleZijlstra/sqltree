@@ -173,6 +173,33 @@ class FunctionCall(Expression):
 
 
 @dataclass
+class CharsetInfo(Node):
+    character_kw: Keyword = field(repr=False, compare=False)
+    set_kw: Keyword = field(repr=False, compare=False)
+    charset: Union[Identifier, Placeholder, StringLiteral]
+
+
+@dataclass
+class CharType(Node):
+    call: Union[Keyword, FunctionCall]
+    charset: Optional[Union[CharsetInfo, Keyword]] = None
+
+
+CastType = Union[FunctionCall, CharType, Keyword, KeywordSequence]
+
+
+@dataclass
+class Cast(Expression):
+    cast_kw: Identifier = field(repr=False, compare=False)
+    left_paren: Punctuation = field(repr=False, compare=False)
+    expr: Expression
+    as_kw: Keyword = field(repr=False, compare=False)
+    type_name: CastType
+    array_kw: Optional[Keyword]
+    right_paren: Punctuation = field(repr=False, compare=False)
+
+
+@dataclass
 class ExprList(Expression):
     left_paren: Punctuation
     exprs: Sequence[WithTrailingComma[Expression]]
@@ -1530,6 +1557,21 @@ def _parse_string_literal(p: Parser) -> Union[StringLiteral, Placeholder]:
         raise ParseError.from_unexpected_token(token, "string literal")
 
 
+def _parse_charset(p: Parser) -> Union[StringLiteral, Identifier, Placeholder]:
+    token = _next_or_else(p, "string literal")
+    if token.typ is TokenType.string:
+        text = token.text[1:-1]
+        if token.text[0] == p.dialect.get_identifier_delimiter():
+            raise ParseError.from_unexpected_token(token, "string literal")
+        return StringLiteral(token, text)
+    elif token.typ is TokenType.placeholder:
+        return Placeholder(token, token.text)
+    elif token.typ is TokenType.identifier:
+        return Identifier(token, token.text)
+    else:
+        raise ParseError.from_unexpected_token(token, "string literal")
+
+
 def _parse_channel_clause(p: Parser) -> Optional[ChannelClause]:
     for_kw = _maybe_consume_keyword(p, "FOR")
     if for_kw is None:
@@ -2035,6 +2077,70 @@ def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expressio
     return identifier
 
 
+def _parse_char_set_info(p: Parser) -> Optional[Union[CharsetInfo, Keyword]]:
+    simple = _maybe_consume_one_of_keywords(p, ["ASCII", "UNICODE"])
+    if simple is not None:
+        return simple
+    character_kw = _maybe_consume_keyword(p, "CHARACTER")
+    if character_kw is None:
+        return None
+    set_kw = _expect_keyword(p, "SET")
+    charset = _parse_charset(p)
+    return CharsetInfo(character_kw, set_kw, charset)
+
+
+def _parse_cast_type(p: Parser) -> CastType:
+    kw = _expect_one_of_keywords(
+        p,
+        [
+            "BINARY",
+            "CHAR",
+            "DATE",
+            "DATETIME",
+            "DECIMAL",
+            "DOUBLE",
+            "FLOAT",
+            "JSON",
+            "NCHAR",
+            "REAL",
+            "SIGNED",
+            "TIME",
+            "UNSIGNED",
+            "YEAR",
+        ],
+    )
+    if kw.text in ("DATE", "DOUBLE", "JSON", "REAL", "YEAR"):
+        return kw
+    elif kw.text in ("SIGNED", "UNSIGNED"):
+        int_kw = _maybe_consume_keyword(p, "INTEGER")
+        if int_kw is None:
+            return kw
+        else:
+            return KeywordSequence([kw, int_kw])
+    elif _next_is_punctuation(p, "("):
+        call = _parse_function_call(p, KeywordIdentifier(kw))
+        if kw.text == "CHAR":
+            charset = _parse_char_set_info(p)
+            return CharType(call, charset)
+        else:
+            return call
+    elif kw.text == "CHAR":
+        charset = _parse_char_set_info(p)
+        return CharType(kw, charset)
+    else:
+        return kw
+
+
+def _parse_cast(cast_kw: Identifier, p: Parser) -> Cast:
+    left_paren = _expect_punctuation(p, "(")
+    expr = _parse_expression(p)
+    as_kw = _expect_keyword(p, "AS")
+    cast_type = _parse_cast_type(p)
+    array_kw = _maybe_consume_keyword(p, "ARRAY")
+    right_paren = _expect_punctuation(p, ")")
+    return Cast(cast_kw, left_paren, expr, as_kw, cast_type, array_kw, right_paren)
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     # https://dev.mysql.com/doc/refman/8.0/en/expressions.html
     token = _next_or_else(p, "expression")
@@ -2053,6 +2159,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
             operand = _parse_simple_expression(p)
             return UnaryOp(op, operand)
     elif token.typ is TokenType.identifier:
+        if token.text.upper() == "CAST":
+            return _parse_cast(Identifier(token, token.text.upper()), p)
         expr = Identifier(token, token.text)
         return _parse_identifier_expression(p, expr)
     elif token.typ is TokenType.number:
@@ -2158,7 +2266,7 @@ def _expect_one_of_keywords(p: Parser, keywords: Sequence[str]) -> Keyword:
     token = _next_or_else(p, expected)
     for keyword in keywords:
         if _token_is_keyword(p, token, keyword):
-            return Keyword(token, token.text)
+            return Keyword(token, token.text.upper())
     raise ParseError.from_unexpected_token(token, expected)
 
 
