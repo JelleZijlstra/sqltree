@@ -198,6 +198,20 @@ def test_select() -> None:
     )
 
 
+def test_count() -> None:
+    # TODO: maybe uppercase COUNT
+    assert format("select count(*) from x") == "SELECT count(*)\nFROM x\n"
+    assert (
+        format("select count(*) from x where y = 3")
+        == "SELECT count(*)\nFROM x\nWHERE y = 3\n"
+    )
+    assert format("select count(a) from b") == "SELECT count(a)\nFROM b\n"
+    assert (
+        format("select count(distinct a) from b")
+        == "SELECT count(DISTINCT a)\nFROM b\n"
+    )
+
+
 def test_expression():
     assert (
         format("select x from y where x = y + 1")

@@ -210,6 +210,12 @@ class Binary(Expression):
 
 
 @dataclass
+class Distinct(Expression):
+    distinct_kw: Keyword = field(compare=False, repr=False)
+    expr: Expression
+
+
+@dataclass
 class ElseClause(Node):
     else_kw: Keyword
     expr: Expression
@@ -2068,6 +2074,9 @@ def _parse_simple_expression(p: Parser) -> Expression:
         elif token.text == "BINARY":
             expr = _parse_simple_expression(p)
             return Binary(Keyword(token, token.text), expr)
+        elif token.text == "DISTINCT":
+            expr = _parse_simple_expression(p)
+            return Distinct(Keyword(token, token.text), expr)
         elif _next_is_punctuation(p, "("):
             kw = Keyword(token, token.text)
             return _parse_function_call(p, KeywordIdentifier(kw))
