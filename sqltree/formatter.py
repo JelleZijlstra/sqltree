@@ -676,10 +676,17 @@ class Formatter(Visitor[None]):
         is_clause = isinstance(node, p.Clause)
         if is_statement or is_clause:
             lines.append("self.start_new_line()")
+        last_was_paren = False
         for i, field_obj in enumerate(fields(typ)):
             lines += _get_lines_for_field(
-                node, i, field_obj, is_statement=is_statement, is_clause=is_clause
+                node,
+                i,
+                field_obj,
+                is_statement=is_statement,
+                is_clause=is_clause,
+                last_was_paren=last_was_paren,
             )
+            last_was_paren = field_obj.name == "left_paren"
 
         body = "".join(f"    {line}\n" for line in lines)
         func_name = f"visit_{typ.__name__}"
@@ -692,7 +699,13 @@ class Formatter(Visitor[None]):
 
 
 def _get_lines_for_field(
-    node: p.Node, i: int, field_obj: Field, *, is_statement: bool, is_clause: bool
+    node: p.Node,
+    i: int,
+    field_obj: Field,
+    *,
+    is_statement: bool,
+    is_clause: bool,
+    last_was_paren: bool,
 ) -> Iterator[str]:
     if is_statement and field_obj.name == "leading_comments":
         return
@@ -708,15 +721,23 @@ def _get_lines_for_field(
     else:
         is_optional = False
         types = {field_obj.type}
-    if types <= {
-        p.Keyword,
-        p.KeywordSequence,
-        p.StringLiteral,
-        p.Identifier,
-        p.Expression,
-        p.DottedTable,
-        p.SimpleTableName,
-    }:
+    if (
+        types
+        <= {
+            p.Keyword,
+            p.KeywordSequence,
+            p.StringLiteral,
+            p.Identifier,
+            p.Expression,
+            p.DottedTable,
+            p.SimpleTableName,
+            p.FunctionCall,
+            p.CharType,
+            p.CharsetInfo,
+            p.Placeholder,
+        }
+        and not last_was_paren
+    ):
         if is_optional:
             if i == 0 and (is_statement or is_clause):
                 raise NotImplementedError(f"{type(node)}")
