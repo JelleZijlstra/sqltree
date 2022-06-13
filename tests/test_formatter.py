@@ -538,7 +538,7 @@ def test_show_replica_status() -> None:
     assert format("show slave status") == "SHOW SLAVE STATUS\n"
     assert (
         format("show replica status for channel 'x'")
-        == "SHOW REPLICA STATUS\nFOR CHANNEL 'x'\n"
+        == "SHOW REPLICA STATUS FOR CHANNEL 'x'\n"
     )
 
     assert format("show slave hosts") == "SHOW SLAVE HOSTS\n"
@@ -580,3 +580,42 @@ def test_explain() -> None:
     assert (
         format("explain format = tree select 1") == "EXPLAIN FORMAT = TREE\nSELECT 1\n"
     )
+
+
+def test_flush() -> None:
+    assert format("flush local binary logs") == "FLUSH LOCAL BINARY LOGS\n"
+    assert (
+        format("flush no_write_to_binlog binary logs")
+        == "FLUSH NO_WRITE_TO_BINLOG BINARY LOGS\n"
+    )
+    assert format("flush binary logs") == "FLUSH BINARY LOGS\n"
+    assert format("flush engine logs") == "FLUSH ENGINE LOGS\n"
+    assert format("flush error logs") == "FLUSH ERROR LOGS\n"
+    assert format("flush gENeRal logs") == "FLUSH GENERAL LOGS\n"
+    assert format("flush hosts") == "FLUSH HOSTS\n"
+    assert format("flush logs") == "FLUSH LOGS\n"
+    assert format("flush optimizer_costs") == "FLUSH OPTIMIZER_COSTS\n"
+    assert format("flush privileges") == "FLUSH PRIVILEGES\n"
+    assert format("flush relay logs") == "FLUSH RELAY LOGS\n"
+    assert (
+        format("flush relay logs for channel 'hello'")
+        == "FLUSH RELAY LOGS FOR CHANNEL 'hello'\n"
+    )
+    assert format("flush slow logs") == "FLUSH SLOW LOGS\n"
+    assert format("flush status") == "FLUSH STATUS\n"
+    assert format("flush user_resources") == "FLUSH USER_RESOURCES\n"
+    assert (
+        format("flush hosts, logs, relay logs for channel 'x', optimizer_costs")
+        == "FLUSH HOSTS, LOGS, RELAY LOGS FOR CHANNEL 'x', OPTIMIZER_COSTS\n"
+    )
+
+    assert format("flush tables") == "FLUSH TABLES\n"
+    assert format("flush tables x") == "FLUSH TABLES x\n"
+    assert format("flush tables x, y") == "FLUSH TABLES x, y\n"
+    assert format("flush tables with read lock") == "FLUSH TABLES WITH READ LOCK\n"
+    assert format("flush tables x with read lock") == "FLUSH TABLES x WITH READ LOCK\n"
+    assert (
+        format("flush tables x, y with read lock")
+        == "FLUSH TABLES x, y WITH READ LOCK\n"
+    )
+    assert format("flush tables x, y for export") == "FLUSH TABLES x, y FOR EXPORT\n"
