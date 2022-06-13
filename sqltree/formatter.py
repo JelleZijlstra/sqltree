@@ -176,6 +176,13 @@ class Formatter(Visitor[None]):
         if add_space:
             self.add_space()
 
+    def write_punctuation(self, node: Optional[p.Punctuation]) -> None:
+        if node is None:
+            return
+        if node.text not in ("(", ")", ",", "*"):
+            self.add_space()
+        self.visit_Punctuation(node)
+
     def parent_isinstance(self, node_cls: Type[p.Node]) -> bool:
         if len(self.node_stack) < 2:
             return False
@@ -706,6 +713,8 @@ class Formatter(Visitor[None]):
                     if i > 0 or (not is_statement and not is_clause):
                         lines.append("self.add_space()")
                     lines.append(f"self.visit(node.{field_obj.name})")
+            elif types == {p.Punctuation}:
+                lines.append(f"self.write_punctuation(node.{field_obj.name})")
             elif all(isinstance(t, type) and issubclass(t, p.Node) for t in types):
                 if is_optional:
                     lines.append(f"self.maybe_visit(node.{field_obj.name})")

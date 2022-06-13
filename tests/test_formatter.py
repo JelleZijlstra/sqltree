@@ -571,3 +571,12 @@ def test_show_warnings() -> None:
     assert format("show count(*) warnings") == "SHOW COUNT(*) WARNINGS\n"
     assert format("show warnings limit 3") == "SHOW WARNINGS\nLIMIT 3\n"
     assert format("show warnings limit 1, 3") == "SHOW WARNINGS\nLIMIT 3 OFFSET 1\n"
+
+
+def test_explain() -> None:
+    assert format("explain select 1") == "EXPLAIN\nSELECT 1\n"
+    assert format("explain select 1 from x") == "EXPLAIN\nSELECT 1\nFROM x\n"
+    assert format("describe select 1") == "DESCRIBE\nSELECT 1\n"
+    assert (
+        format("explain format = tree select 1") == "EXPLAIN FORMAT = TREE\nSELECT 1\n"
+    )

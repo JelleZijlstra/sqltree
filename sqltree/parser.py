@@ -719,6 +719,20 @@ class ShowWarnError(Statement):
     limit_clause: MaybeClause[SelectLimitClause]
 
 
+@dataclass
+class ExplainType(Node):
+    format_kw: Keyword = field(compare=False, repr=False)
+    eq: Punctuation = field(compare=False, repr=False)
+    format_name: Keyword  # TRADITIONAL, JSON, TREE
+
+
+@dataclass
+class Explain(Statement):
+    explain_kw: Keyword
+    explain_type: Optional[ExplainType]
+    statement: Statement
+
+
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
     p = Parser(PeekingIterator(list(tokens)), dialect)
     return _parse_statement(p)
@@ -1401,6 +1415,23 @@ def _parse_drop(p: Parser) -> DropTable:
     return DropTable((), drop, temporary, table, if_exists, tables, tail)
 
 
+def _parse_explain(p: Parser) -> Explain:
+    explain = _expect_one_of_keywords(p, ["EXPLAIN", "DESCRIBE", "DESC"])
+    format_kw = _maybe_consume_keyword(p, "FORMAT")
+    if format_kw is not None:
+        eq = _expect_punctuation(p, "=")
+        format_name = _expect_one_of_keywords(p, ["JSON", "TREE", "TRADITIONAL"])
+        explain_type = ExplainType(format_kw, eq, format_name)
+    else:
+        explain_type = None
+    _expect_one_of_keywords(
+        p, ["SELECT", "DELETE", "INSERT", "REPLACE", "UPDATE", "TABLE"]
+    )
+    p.pi.wind_back()
+    stmt = _parse_statement(p)
+    return Explain((), explain, explain_type, stmt)
+
+
 def _parse_string_literal(p: Parser) -> StringLiteral:
     token = _next_or_else(p, "string literal")
     if token.typ is not TokenType.string:
@@ -1605,6 +1636,9 @@ _VERB_TO_PARSER = {
     "ROLLBACK": _parse_rollback,
     "DROP": _parse_drop,
     "SHOW": _parse_show,
+    "EXPLAIN": _parse_explain,
+    "DESCRIBE": _parse_explain,
+    "DESC": _parse_explain,
 }
 
 
