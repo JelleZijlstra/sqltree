@@ -25,6 +25,9 @@ jobs:
         - name: py310
           python: '3.10'
           toxenv: py310
+        - name: py311
+          python: '3.11-dev'
+          toxenv: py311
         - name: black
           python: '3.9'
           toxenv: black
@@ -33,9 +36,9 @@ jobs:
           toxenv: pyanalyze
 
     steps:
-    - uses: actions/checkout@v1
+    - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python }}
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python }}
     - name: Install dependencies

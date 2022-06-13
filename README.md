@@ -1,14 +1,13 @@
 # sqltree
 
-sqltree is an experimental parser for SQL, providing
+`sqltree` is an experimental parser for SQL, providing
 a syntax tree for SQL queries. Possible use cases include:
 
 - Static analysis (for example, to validate column names)
 - Translating queries to another SQL dialect
 - Autoformatting
 
-sqltree is in an early stage of development, but it
-can parse basic queries:
+`sqltree` can parse queries:
 
 ```
 $ python -m sqltree "SELECT * FROM x WHERE x = 3"
@@ -24,6 +23,12 @@ FROM x
 WHERE x = 3
 ```
 
+SQL is a big language with a complicated grammar that varies significantly
+between database vendors. `sqltree` is designed to be flexible enough to parse
+the full syntax supported by different databases, but I am prioritizing
+constructs used in my use cases for the parser. So far, that has meant a focus
+on parsing MySQL 8 queries. Further syntax will be added as I have time.
+
 ## API
 
 - `sqltree.sqltree`: parse a SQL query and return the parse tree. See `sqltree.parser`
@@ -32,6 +37,10 @@ WHERE x = 3
 - `sqltree.tools.get_tables`: get the tables referenced in a SQL query.
 
 More detailed documentation to follow.
+
+## Requirements
+
+`sqltree` runs on Python 3.6 and up and it has no dependencies.
 
 ## Using the fixit rule
 
@@ -42,3 +51,9 @@ formatting SQL. Here is how to use it:
   - `pip install fixit`
   - `python -m fixit.cli.init_config`
 - Run `python -m fixit.cli.apply_fix --rules sqltree.fixit.SqlFormatRule path/to/your/code`
+
+## Changelog
+
+### Version 0.1.0 (June 13, 2022)
+
+- Initial release
