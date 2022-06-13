@@ -643,7 +643,7 @@ class DatabaseClause(Node):
 @dataclass
 class LikeClause(Clause):
     like_kw: Keyword = field(compare=False, repr=False)
-    pattern: StringLiteral
+    pattern: Expression
 
 
 LikeOrWhere = MaybeClause[Union[LikeClause, WhereClause]]
@@ -703,7 +703,7 @@ class ShowTriggers(Statement):
 class ChannelClause(Node):
     for_kw: Keyword = field(compare=False, repr=False)
     channel_kw: Keyword = field(compare=False, repr=False)
-    channel: StringLiteral
+    channel: Expression
 
 
 @dataclass
@@ -1490,14 +1490,17 @@ def _parse_explain(p: Parser) -> Explain:
     return Explain((), explain, explain_type, stmt)
 
 
-def _parse_string_literal(p: Parser) -> StringLiteral:
+def _parse_string_literal(p: Parser) -> Union[StringLiteral, Placeholder]:
     token = _next_or_else(p, "string literal")
-    if token.typ is not TokenType.string:
+    if token.typ is TokenType.string:
+        text = token.text[1:-1]
+        if token.text[0] == p.dialect.get_identifier_delimiter():
+            raise ParseError.from_unexpected_token(token, "string literal")
+        return StringLiteral(token, text)
+    elif token.typ is TokenType.placeholder:
+        return Placeholder(token, token.text)
+    else:
         raise ParseError.from_unexpected_token(token, "string literal")
-    text = token.text[1:-1]
-    if token.text[0] == p.dialect.get_identifier_delimiter():
-        raise ParseError.from_unexpected_token(token, "string literal")
-    return StringLiteral(token, text)
 
 
 def _parse_channel_clause(p: Parser) -> Optional[ChannelClause]:

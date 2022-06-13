@@ -511,6 +511,7 @@ def test_show_tables() -> None:
     assert format("show tables in x") == "SHOW TABLES IN x\n"
     assert format("show tables in x like 'y'") == "SHOW TABLES IN x\nLIKE 'y'\n"
     assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"
+    assert format("show tables like %s") == "SHOW TABLES\nLIKE %s\n"
 
 
 def test_show_columns() -> None:

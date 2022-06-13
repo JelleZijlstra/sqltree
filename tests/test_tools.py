@@ -12,4 +12,5 @@ def test_get_tables() -> None:
     assert get_tables("INSERT INTO x (a, b) SELECT * FROM y") == ["x", "y"]
     assert get_tables("REPLACE INTO x (a, b) SELECT * FROM y") == ["x", "y"]
     assert get_tables("SHOW COLUMNS FROM x") == ["x"]
+    assert get_tables("SHOW COLUMNS FROM `x`") == ["x"]
     assert get_tables("SHOW INDEXES FROM `x`.`y`") == ["x.y"]
