@@ -191,6 +191,26 @@ def test_select() -> None:
     )
     assert format("select a.* from a, b") == "SELECT a.*\nFROM a, b\n"
 
+    assert format("select a from b for update") == "SELECT a\nFROM b\nFOR UPDATE\n"
+    assert (
+        format("select a from b for update skip locked")
+        == "SELECT a\nFROM b\nFOR UPDATE SKIP LOCKED\n"
+    )
+
+
+def test_count() -> None:
+    # TODO: maybe uppercase COUNT
+    assert format("select count(*) from x") == "SELECT count(*)\nFROM x\n"
+    assert (
+        format("select count(*) from x where y = 3")
+        == "SELECT count(*)\nFROM x\nWHERE y = 3\n"
+    )
+    assert format("select count(a) from b") == "SELECT count(a)\nFROM b\n"
+    assert (
+        format("select count(distinct a) from b")
+        == "SELECT count(DISTINCT a)\nFROM b\n"
+    )
+
 
 def test_expression():
     assert (
@@ -210,7 +230,65 @@ def test_expression():
         == "SELECT x\nWHERE LEFT(y, 5) = 'x'\n"
     )
 
+    assert format("select 2 > 1") == "SELECT 2 > 1\n"
+    assert format("select 2 % 1") == "SELECT 2 % 1\n"
+    # We allow this in conjunction with %s substitution.
+    assert format("select 2 %% 1") == "SELECT 2 %% 1\n"
+
     assert format("select binary 'x'") == "SELECT BINARY 'x'\n"
+
+
+def test_cast() -> None:
+    assert format("select cast(1 as binary)") == "SELECT CAST(1 AS BINARY)\n"
+    assert format("select cast(1 as binary(5))") == "SELECT CAST(1 AS BINARY(5))\n"
+    assert (
+        format("select cast(1 as binary(5) array)")
+        == "SELECT CAST(1 AS BINARY(5) ARRAY)\n"
+    )
+    assert format("select cast(1 as char)") == "SELECT CAST(1 AS CHAR)\n"
+    assert format("select cast(1 as char(5))") == "SELECT CAST(1 AS CHAR(5))\n"
+    assert format("select cast(1 as char ascii)") == "SELECT CAST(1 AS CHAR ASCII)\n"
+    assert (
+        format("select cast(1 as char unicode)") == "SELECT CAST(1 AS CHAR UNICODE)\n"
+    )
+    assert (
+        format("select cast(1 as char(5) ascii)") == "SELECT CAST(1 AS CHAR(5) ASCII)\n"
+    )
+    assert (
+        format("select cast(1 as char(5) character set latin1)")
+        == "SELECT CAST(1 AS CHAR(5) CHARACTER SET latin1)\n"
+    )
+    assert (
+        format("select cast(1 as char(5) character set 'latin1')")
+        == "SELECT CAST(1 AS CHAR(5) CHARACTER SET 'latin1')\n"
+    )
+    assert format("select cast(1 as date)") == "SELECT CAST(1 AS DATE)\n"
+    assert format("select cast(1 as datetime)") == "SELECT CAST(1 AS DATETIME)\n"
+    assert format("select cast(1 as datetime(6))") == "SELECT CAST(1 AS DATETIME(6))\n"
+    assert format("select cast(1 as decimal(6))") == "SELECT CAST(1 AS DECIMAL(6))\n"
+    assert (
+        format("select cast(1 as decimal(6, 7))") == "SELECT CAST(1 AS DECIMAL(6, 7))\n"
+    )
+    assert format("select cast(1 as double)") == "SELECT CAST(1 AS DOUBLE)\n"
+    assert format("select cast(1 as float)") == "SELECT CAST(1 AS FLOAT)\n"
+    assert format("select cast(1 as float(3))") == "SELECT CAST(1 AS FLOAT(3))\n"
+    assert format("select cast(1 as json)") == "SELECT CAST(1 AS JSON)\n"
+    assert format("select cast(1 as nchar)") == "SELECT CAST(1 AS NCHAR)\n"
+    assert format("select cast(1 as nchar(5))") == "SELECT CAST(1 AS NCHAR(5))\n"
+    assert format("select cast(1 as real)") == "SELECT CAST(1 AS REAL)\n"
+    assert format("select cast(1 as signed)") == "SELECT CAST(1 AS SIGNED)\n"
+    assert (
+        format("select cast(1 as signed integer)")
+        == "SELECT CAST(1 AS SIGNED INTEGER)\n"
+    )
+    assert format("select cast(1 as time)") == "SELECT CAST(1 AS TIME)\n"
+    assert format("select cast(1 as time(6))") == "SELECT CAST(1 AS TIME(6))\n"
+    assert format("select cast(1 as unsigned)") == "SELECT CAST(1 AS UNSIGNED)\n"
+    assert (
+        format("select cast(1 as unsigned integer)")
+        == "SELECT CAST(1 AS UNSIGNED INTEGER)\n"
+    )
+    assert format("select cast(1 as year)") == "SELECT CAST(1 AS YEAR)\n"
 
 
 def test_literals() -> None:
@@ -506,32 +584,54 @@ def test_show_tables() -> None:
     assert format("show tables") == "SHOW TABLES\n"
     assert (
         format("show extended full tables from x")
-        == "SHOW EXTENDED FULL TABLES\nFROM x\n"
+        == "SHOW EXTENDED FULL TABLES FROM x\n"
     )
-    assert format("show tables in x") == "SHOW TABLES\nIN x\n"
-    assert format("show tables in x like 'y'") == "SHOW TABLES\nIN x\nLIKE 'y'\n"
-    assert format("show tables in x where z = 3") == "SHOW TABLES\nIN x\nWHERE z = 3\n"
+    assert format("show tables in x") == "SHOW TABLES IN x\n"
+    assert format("show tables in x like 'y'") == "SHOW TABLES IN x\nLIKE 'y'\n"
+    assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"
+    assert format("show tables like %s") == "SHOW TABLES\nLIKE %s\n"
+
+
+def test_show_columns() -> None:
+    assert (
+        format("show extended full columns from x")
+        == "SHOW EXTENDED FULL COLUMNS FROM x\n"
+    )
+    assert format("show columns in x") == "SHOW COLUMNS IN x\n"
+    assert format("show columns in x from y") == "SHOW COLUMNS IN x FROM y\n"
+    assert format("show columns in x like 'y'") == "SHOW COLUMNS IN x\nLIKE 'y'\n"
+    assert format("show columns in x where z = 3") == "SHOW COLUMNS IN x\nWHERE z = 3\n"
+    assert format("show fields in x where z = 3") == "SHOW FIELDS IN x\nWHERE z = 3\n"
+
+
+def test_show_index() -> None:
+    assert format("show extended index from x") == "SHOW EXTENDED INDEX FROM x\n"
+    assert format("show index in x") == "SHOW INDEX IN x\n"
+    assert format("show index in x from y") == "SHOW INDEX IN x FROM y\n"
+    assert format("show index in x where z = 3") == "SHOW INDEX IN x\nWHERE z = 3\n"
+    assert format("show indexes in x where z = 3") == "SHOW INDEXES IN x\nWHERE z = 3\n"
+    assert format("show keys in x where z = 3") == "SHOW KEYS IN x\nWHERE z = 3\n"
 
 
 def test_show_triggers() -> None:
     assert format("show triggers") == "SHOW TRIGGERS\n"
-    assert format("show triggers in x") == "SHOW TRIGGERS\nIN x\n"
-    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS\nIN x\nLIKE 'y'\n"
+    assert format("show triggers in x") == "SHOW TRIGGERS IN x\n"
+    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS IN x\nLIKE 'y'\n"
     assert (
-        format("show triggers in x where z = 3") == "SHOW TRIGGERS\nIN x\nWHERE z = 3\n"
+        format("show triggers in x where z = 3") == "SHOW TRIGGERS IN x\nWHERE z = 3\n"
     )
 
 
 def test_show_table_status() -> None:
     assert format("show table status") == "SHOW TABLE STATUS\n"
-    assert format("show table status in x") == "SHOW TABLE STATUS\nIN x\n"
+    assert format("show table status in x") == "SHOW TABLE STATUS IN x\n"
     assert (
         format("show table status in x like 'y'")
-        == "SHOW TABLE STATUS\nIN x\nLIKE 'y'\n"
+        == "SHOW TABLE STATUS IN x\nLIKE 'y'\n"
     )
     assert (
         format("show table status in x where z = 3")
-        == "SHOW TABLE STATUS\nIN x\nWHERE z = 3\n"
+        == "SHOW TABLE STATUS IN x\nWHERE z = 3\n"
     )
 
 
@@ -621,3 +721,15 @@ def test_flush() -> None:
         == "FLUSH TABLES x, y WITH READ LOCK\n"
     )
     assert format("flush tables x, y for export") == "FLUSH TABLES x, y FOR EXPORT\n"
+
+
+def test_truncate() -> None:
+    assert format("truncate table x") == "TRUNCATE TABLE x\n"
+    assert format("truncate x") == "TRUNCATE x\n"
+    assert format("truncate x.y") == "TRUNCATE x.y\n"
+
+
+def test_create_table() -> None:
+    assert format("create table x like y") == "CREATE TABLE x LIKE y\n"
+    assert format("create table x (like y)") == "CREATE TABLE x (LIKE y)\n"
+    assert format("create table a.b (like c.d)") == "CREATE TABLE a.b (LIKE c.d)\n"

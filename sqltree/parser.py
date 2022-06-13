@@ -137,6 +137,11 @@ class DottedTable(Node):
 
 
 @dataclass
+class SimpleTableName(Node):
+    identifier: Identifier
+
+
+@dataclass
 class StringLiteral(Expression, Leaf):
     value: str
 
@@ -165,6 +170,33 @@ class FunctionCall(Expression):
     left_paren: Punctuation
     args: Sequence[WithTrailingComma[Expression]]
     right_paren: Punctuation
+
+
+@dataclass
+class CharsetInfo(Node):
+    character_kw: Keyword = field(repr=False, compare=False)
+    set_kw: Keyword = field(repr=False, compare=False)
+    charset: Union[Identifier, Placeholder, StringLiteral]
+
+
+@dataclass
+class CharType(Node):
+    call: Union[Keyword, FunctionCall]
+    charset: Optional[Union[CharsetInfo, Keyword]] = None
+
+
+CastType = Union[FunctionCall, CharType, Keyword, KeywordSequence]
+
+
+@dataclass
+class Cast(Expression):
+    cast_kw: Identifier = field(repr=False, compare=False)
+    left_paren: Punctuation = field(repr=False, compare=False)
+    expr: Expression
+    as_kw: Keyword = field(repr=False, compare=False)
+    type_name: CastType
+    array_kw: Optional[Keyword]
+    right_paren: Punctuation = field(repr=False, compare=False)
 
 
 @dataclass
@@ -201,6 +233,12 @@ class Parenthesized(Expression):
 @dataclass
 class Binary(Expression):
     binary_kw: Keyword = field(compare=False, repr=False)
+    expr: Expression
+
+
+@dataclass
+class Distinct(Expression):
+    distinct_kw: Keyword = field(compare=False, repr=False)
     expr: Expression
 
 
@@ -310,7 +348,7 @@ class NaturalJoinedTable(Node):
 
 
 JoinedTable = Union[SimpleJoinedTable, LeftRightJoinedTable, NaturalJoinedTable]
-TableName = Union[Identifier, DottedTable]
+TableName = Union[SimpleTableName, DottedTable]
 
 
 @dataclass
@@ -423,6 +461,12 @@ class WithClause(Node):
 
 
 @dataclass
+class LockMode(Clause):
+    mode: KeywordSequence  # FOR UPDATE, FOR SHARE
+    modifier: Optional[Union[Keyword, KeywordSequence]]  # NOWAIT, SKIP LOCKED
+
+
+@dataclass
 class PlaceholderClause(Clause):
     placeholder: Placeholder
 
@@ -447,6 +491,7 @@ class Select(Statement):
     having: MaybeClause[HavingClause] = None
     order_by: MaybeClause[OrderByClause] = None
     limit: MaybeClause[SelectLimitClause] = None
+    lock_mode: MaybeClause[LockMode] = None
 
 
 @dataclass
@@ -630,7 +675,40 @@ class DropTable(Statement):
 
 
 @dataclass
-class DatabaseClause(Clause):
+class LikeTable(Node):
+    like_kw: Keyword = field(compare=False, repr=False)
+    table: TableName
+
+
+@dataclass
+class ParenthesizedLikeTable(Node):
+    left_paren: Punctuation
+    like_table: LikeTable
+    right_paren: Punctuation
+
+
+CreateTableDefinition = Union[LikeTable, ParenthesizedLikeTable]
+
+
+@dataclass
+class CreateTable(Statement):
+    create_kw: Keyword = field(compare=False, repr=False)
+    temporary_kw: Optional[Keyword]
+    table_kw: Keyword = field(compare=False, repr=False)
+    if_not_exists: Optional[KeywordSequence]
+    table_name: TableName
+    definition: CreateTableDefinition
+
+
+@dataclass
+class Truncate(Statement):
+    truncate_kw: Keyword = field(compare=False, repr=False)
+    table_kw: Optional[Keyword]
+    table: TableName
+
+
+@dataclass
+class DatabaseClause(Node):
     kw: Keyword  # FROM or IN
     db_name: Identifier
 
@@ -638,10 +716,33 @@ class DatabaseClause(Clause):
 @dataclass
 class LikeClause(Clause):
     like_kw: Keyword = field(compare=False, repr=False)
-    pattern: StringLiteral
+    pattern: Expression
 
 
 LikeOrWhere = MaybeClause[Union[LikeClause, WhereClause]]
+
+
+@dataclass
+class ShowColumns(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    extended_kw: Optional[Keyword]
+    full_kw: Optional[Keyword]
+    columns_kw: Keyword  # COLUMNS or FIELDS
+    from_kw: Keyword  # FROM, IN
+    table_name: TableName
+    db_clause: MaybeClause[DatabaseClause]
+    like_clause: LikeOrWhere
+
+
+@dataclass
+class ShowIndex(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    extended_kw: Optional[Keyword]
+    index_kw: Keyword  # INDEX, INDEXES, KEYS
+    from_kw: Keyword  # FROM, IN
+    table_name: TableName
+    db_clause: MaybeClause[DatabaseClause]
+    where_clause: MaybeClause[WhereClause]
 
 
 @dataclass
@@ -675,7 +776,7 @@ class ShowTriggers(Statement):
 class ChannelClause(Node):
     for_kw: Keyword = field(compare=False, repr=False)
     channel_kw: Keyword = field(compare=False, repr=False)
-    channel: StringLiteral
+    channel: Expression
 
 
 @dataclass
@@ -913,7 +1014,7 @@ def _parse_table_name(p: Parser) -> TableName:
     if dot is not None:
         right = _parse_identifier(p)
         return DottedTable(identifier, dot, right)
-    return identifier
+    return SimpleTableName(identifier)
 
 
 def _parse_table_factor(p: Parser) -> TableFactor:
@@ -1115,6 +1216,18 @@ def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
     return None
 
 
+def _parse_lock_mode(p: Parser) -> Optional[LockMode]:
+    lock_mode = _maybe_consume_keyword_sequence(p, ["FOR", "UPDATE"])
+    if lock_mode is None:
+        lock_mode = _maybe_consume_keyword_sequence(p, ["FOR", "SHARE"])
+        if lock_mode is None:
+            return None
+    modifier = _maybe_consume_keyword(p, "NOWAIT")
+    if modifier is None:
+        modifier = _maybe_consume_keyword_sequence(p, ["SKIP", "LOCKED"])
+    return LockMode(lock_mode, modifier)
+
+
 def _parse_update(p: Parser) -> Update:
     kw = _expect_keyword(p, "UPDATE")
     table = _parse_table_reference(p)
@@ -1225,6 +1338,7 @@ def _parse_single_select(p: Parser) -> Select:
     having_clause = _parse_maybe_clause(p, _parse_having_clause)
     order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
     select_limit_clause = _parse_maybe_clause(p, _parse_select_limit_clause)
+    lock_mode = _parse_maybe_clause(p, _parse_lock_mode)
 
     return Select(
         (),
@@ -1238,6 +1352,7 @@ def _parse_single_select(p: Parser) -> Select:
         having_clause,
         order_by_clause,
         select_limit_clause,
+        lock_mode,
     )
 
 
@@ -1462,14 +1577,32 @@ def _parse_explain(p: Parser) -> Explain:
     return Explain((), explain, explain_type, stmt)
 
 
-def _parse_string_literal(p: Parser) -> StringLiteral:
+def _parse_string_literal(p: Parser) -> Union[StringLiteral, Placeholder]:
     token = _next_or_else(p, "string literal")
-    if token.typ is not TokenType.string:
+    if token.typ is TokenType.string:
+        text = token.text[1:-1]
+        if token.text[0] == p.dialect.get_identifier_delimiter():
+            raise ParseError.from_unexpected_token(token, "string literal")
+        return StringLiteral(token, text)
+    elif token.typ is TokenType.placeholder:
+        return Placeholder(token, token.text)
+    else:
         raise ParseError.from_unexpected_token(token, "string literal")
-    text = token.text[1:-1]
-    if token.text[0] == p.dialect.get_identifier_delimiter():
+
+
+def _parse_charset(p: Parser) -> Union[StringLiteral, Identifier, Placeholder]:
+    token = _next_or_else(p, "string literal")
+    if token.typ is TokenType.string:
+        text = token.text[1:-1]
+        if token.text[0] == p.dialect.get_identifier_delimiter():
+            raise ParseError.from_unexpected_token(token, "string literal")
+        return StringLiteral(token, text)
+    elif token.typ is TokenType.placeholder:
+        return Placeholder(token, token.text)
+    elif token.typ is TokenType.identifier:
+        return Identifier(token, token.text)
+    else:
         raise ParseError.from_unexpected_token(token, "string literal")
-    return StringLiteral(token, text)
 
 
 def _parse_channel_clause(p: Parser) -> Optional[ChannelClause]:
@@ -1534,6 +1667,35 @@ def _parse_show_tables(
     db_clause = _parse_db_clause(p)
     like_clause = _parse_like_or_where(p)
     return ShowTables((), show, extended, full, kind_kw, db_clause, like_clause)
+
+
+def _parse_show_columns(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowColumns:
+    extended = _maybe_consume_keyword(modifiers_p, "EXTENDED")
+    full = _maybe_consume_keyword(modifiers_p, "FULL")
+    _assert_done(modifiers_p, "EXTENDED or FULL")
+    from_kw = _expect_one_of_keywords(p, ["FROM", "IN"])
+    table = _parse_table_name(p)
+    db_clause = _parse_db_clause(p)
+    like_clause = _parse_like_or_where(p)
+    return ShowColumns(
+        (), show, extended, full, kind_kw, from_kw, table, db_clause, like_clause
+    )
+
+
+def _parse_show_index(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowIndex:
+    extended = _maybe_consume_keyword(modifiers_p, "EXTENDED")
+    _assert_done(modifiers_p, "EXTENDED")
+    from_kw = _expect_one_of_keywords(p, ["FROM", "IN"])
+    table = _parse_table_name(p)
+    db_clause = _parse_db_clause(p)
+    where_clause = _parse_where_clause(p)
+    return ShowIndex(
+        (), show, extended, kind_kw, from_kw, table, db_clause, where_clause
+    )
 
 
 def _parse_show_table_status(
@@ -1611,6 +1773,11 @@ _SHOW_KIND_TO_PARSER: Dict[str, _ShowParser] = {
     "COUNT": _parse_show_count,
     "WARNINGS": _parse_show_warnings_or_errors,
     "ERRORS": _parse_show_warnings_or_errors,
+    "COLUMNS": _parse_show_columns,
+    "FIELDS": _parse_show_columns,
+    "INDEX": _parse_show_index,
+    "INDEXES": _parse_show_index,
+    "KEYS": _parse_show_index,
 }
 _SHOW_KINDS = list(_SHOW_KIND_TO_PARSER)
 _EOF = Token(TokenType.eof, "", Location("", 0, 0))
@@ -1710,6 +1877,37 @@ def _parse_flush(p: Parser) -> Flush:
     return Flush((), kw, modifier, option)
 
 
+def _parse_truncate(p: Parser) -> Truncate:
+    kw = _expect_keyword(p, "TRUNCATE")
+    table_kw = _maybe_consume_keyword(p, "TABLE")
+    table = _parse_table_name(p)
+    return Truncate((), kw, table_kw, table)
+
+
+def _parse_create(p: Parser) -> CreateTable:
+    kw = _expect_keyword(p, "CREATE")
+    temporary = _maybe_consume_keyword(p, "TEMPORARY")
+    table_kw = _expect_keyword(p, "TABLE")
+    kwseq = _maybe_consume_keyword_sequence(p, ["IF", "NOT", "EXISTS"])
+    name = _parse_table_name(p)
+    # We skip all the other options in the full CREATE TABLE statement. It's
+    # quite complicated:
+    # https://dev.mysql.com/doc/refman/8.0/en/create-table.html
+    like_kw = _maybe_consume_keyword(p, "LIKE")
+    if like_kw is not None:
+        like_table = _parse_table_name(p)
+        defn = LikeTable(like_kw, like_table)
+    else:
+        left_paren = _expect_punctuation(p, "(")
+        like_kw = _expect_keyword(p, "LIKE")
+        like_table = _parse_table_name(p)
+        right_paren = _expect_punctuation(p, ")")
+        defn = ParenthesizedLikeTable(
+            left_paren, LikeTable(like_kw, like_table), right_paren
+        )
+    return CreateTable((), kw, temporary, table_kw, kwseq, name, defn)
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
@@ -1727,6 +1925,8 @@ _VERB_TO_PARSER = {
     "DESCRIBE": _parse_explain,
     "DESC": _parse_explain,
     "FLUSH": _parse_flush,
+    "TRUNCATE": _parse_truncate,
+    "CREATE": _parse_create,
 }
 
 
@@ -1804,7 +2004,7 @@ def P(text: str) -> Tuple[TokenType, str]:
 
 _BINOP_PRECEDENCE = [
     (P("^"),),
-    (P("*"), P("/"), P("DIV"), P("%"), P("MOD")),
+    (P("*"), P("/"), P("DIV"), P("%"), P("%%"), P("MOD")),
     (P("-"), P("+")),
     (P("<<"), P(">>")),
     (P("&"),),
@@ -1943,6 +2143,70 @@ def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expressio
     return identifier
 
 
+def _parse_char_set_info(p: Parser) -> Optional[Union[CharsetInfo, Keyword]]:
+    simple = _maybe_consume_one_of_keywords(p, ["ASCII", "UNICODE"])
+    if simple is not None:
+        return simple
+    character_kw = _maybe_consume_keyword(p, "CHARACTER")
+    if character_kw is None:
+        return None
+    set_kw = _expect_keyword(p, "SET")
+    charset = _parse_charset(p)
+    return CharsetInfo(character_kw, set_kw, charset)
+
+
+def _parse_cast_type(p: Parser) -> CastType:
+    kw = _expect_one_of_keywords(
+        p,
+        [
+            "BINARY",
+            "CHAR",
+            "DATE",
+            "DATETIME",
+            "DECIMAL",
+            "DOUBLE",
+            "FLOAT",
+            "JSON",
+            "NCHAR",
+            "REAL",
+            "SIGNED",
+            "TIME",
+            "UNSIGNED",
+            "YEAR",
+        ],
+    )
+    if kw.text in ("DATE", "DOUBLE", "JSON", "REAL", "YEAR"):
+        return kw
+    elif kw.text in ("SIGNED", "UNSIGNED"):
+        int_kw = _maybe_consume_keyword(p, "INTEGER")
+        if int_kw is None:
+            return kw
+        else:
+            return KeywordSequence([kw, int_kw])
+    elif _next_is_punctuation(p, "("):
+        call = _parse_function_call(p, KeywordIdentifier(kw))
+        if kw.text == "CHAR":
+            charset = _parse_char_set_info(p)
+            return CharType(call, charset)
+        else:
+            return call
+    elif kw.text == "CHAR":
+        charset = _parse_char_set_info(p)
+        return CharType(kw, charset)
+    else:
+        return kw
+
+
+def _parse_cast(cast_kw: Identifier, p: Parser) -> Cast:
+    left_paren = _expect_punctuation(p, "(")
+    expr = _parse_expression(p)
+    as_kw = _expect_keyword(p, "AS")
+    cast_type = _parse_cast_type(p)
+    array_kw = _maybe_consume_keyword(p, "ARRAY")
+    right_paren = _expect_punctuation(p, ")")
+    return Cast(cast_kw, left_paren, expr, as_kw, cast_type, array_kw, right_paren)
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     # https://dev.mysql.com/doc/refman/8.0/en/expressions.html
     token = _next_or_else(p, "expression")
@@ -1961,6 +2225,8 @@ def _parse_simple_expression(p: Parser) -> Expression:
             operand = _parse_simple_expression(p)
             return UnaryOp(op, operand)
     elif token.typ is TokenType.identifier:
+        if token.text.upper() == "CAST":
+            return _parse_cast(Identifier(token, token.text.upper()), p)
         expr = Identifier(token, token.text)
         return _parse_identifier_expression(p, expr)
     elif token.typ is TokenType.number:
@@ -1982,6 +2248,9 @@ def _parse_simple_expression(p: Parser) -> Expression:
         elif token.text == "BINARY":
             expr = _parse_simple_expression(p)
             return Binary(Keyword(token, token.text), expr)
+        elif token.text == "DISTINCT":
+            expr = _parse_simple_expression(p)
+            return Distinct(Keyword(token, token.text), expr)
         elif _next_is_punctuation(p, "("):
             kw = Keyword(token, token.text)
             return _parse_function_call(p, KeywordIdentifier(kw))
@@ -2063,7 +2332,7 @@ def _expect_one_of_keywords(p: Parser, keywords: Sequence[str]) -> Keyword:
     token = _next_or_else(p, expected)
     for keyword in keywords:
         if _token_is_keyword(p, token, keyword):
-            return Keyword(token, token.text)
+            return Keyword(token, token.text.upper())
     raise ParseError.from_unexpected_token(token, expected)
 
 
