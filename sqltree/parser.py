@@ -253,7 +253,7 @@ class IndexHint(Node):
     for_kw: Optional[Keyword]
     for_what: Union[None, Keyword, KeywordSequence]  # JOIN/ORDER BY/GROUP BY
     left_paren: Punctuation
-    index_list: Sequence[WithTrailingComma[Identifier]]
+    index_list: Sequence[WithTrailingComma[Union[Identifier, Keyword]]]
     right_paren: Punctuation
 
 
@@ -789,6 +789,20 @@ def _parse_join_specification(p: Parser) -> Optional[JoinSpecification]:
     return None
 
 
+def _parse_index(p: Parser) -> Union[Identifier, Keyword]:
+    token = _next_or_else(p, "identifier")
+    if token.typ is not TokenType.identifier:
+        if token.typ is TokenType.string:
+            delimiter = p.dialect.get_identifier_delimiter()
+            if token.text[0] == delimiter == token.text[-1]:
+                identifier = token.text[1:-1]
+                return Identifier(token, identifier)
+        elif _token_is_keyword(p, token, "PRIMARY"):
+            return Keyword(token, token.text)
+        raise ParseError.from_unexpected_token(token, "identifier")
+    return Identifier(token, token.text)
+
+
 def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
     intro_kws = {"USE", "IGNORE", "FORCE"}
     kind_kws = {"INDEX", "KEY"}
@@ -824,7 +838,7 @@ def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
                 right_paren.token.loc,
             )
     else:
-        index_list = _parse_comma_separated(p, _parse_identifier)
+        index_list = _parse_comma_separated(p, _parse_index)
         right_paren = _expect_punctuation(p, ")")
     return IndexHint(
         intro_kw, kind_kw, for_kw, for_what, left_paren, index_list, right_paren

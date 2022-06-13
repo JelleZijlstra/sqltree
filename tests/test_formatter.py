@@ -281,6 +281,10 @@ def test_multi_split() -> None:
 def test_table_reference() -> None:
     assert format("select x from y use index(z)") == "SELECT x\nFROM y\nUSE INDEX(z)\n"
     assert (
+        format("select x from y use index(PRIMARY)")
+        == "SELECT x\nFROM y\nUSE INDEX(PRIMARY)\n"
+    )
+    assert (
         format("select x from y use index(z), ignore key for join(z)")
         == "SELECT x\nFROM y\nUSE INDEX(z),\nIGNORE KEY FOR JOIN(z)\n"
     )
