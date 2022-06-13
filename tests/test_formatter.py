@@ -513,6 +513,19 @@ def test_show_tables() -> None:
     assert format("show tables in x where z = 3") == "SHOW TABLES\nIN x\nWHERE z = 3\n"
 
 
+def test_show_columns() -> None:
+    assert format("show columns") == "SHOW COLUMNS\n"
+    assert (
+        format("show extended full columns from x")
+        == "SHOW EXTENDED FULL COLUMNS\nFROM x\n"
+    )
+    assert format("show columns in x") == "SHOW COLUMNS\nIN x\n"
+    assert format("show columns in x like 'y'") == "SHOW COLUMNS\nIN x\nLIKE 'y'\n"
+    assert (
+        format("show columns in x where z = 3") == "SHOW COLUMNS\nIN x\nWHERE z = 3\n"
+    )
+
+
 def test_show_triggers() -> None:
     assert format("show triggers") == "SHOW TRIGGERS\n"
     assert format("show triggers in x") == "SHOW TRIGGERS\nIN x\n"
