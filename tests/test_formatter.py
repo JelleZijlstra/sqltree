@@ -721,3 +721,9 @@ def test_flush() -> None:
         == "FLUSH TABLES x, y WITH READ LOCK\n"
     )
     assert format("flush tables x, y for export") == "FLUSH TABLES x, y FOR EXPORT\n"
+
+
+def test_truncate() -> None:
+    assert format("truncate table x") == "TRUNCATE TABLE x\n"
+    assert format("truncate x") == "TRUNCATE x\n"
+    assert format("truncate x.y") == "TRUNCATE x.y\n"
