@@ -645,6 +645,18 @@ LikeOrWhere = MaybeClause[Union[LikeClause, WhereClause]]
 
 
 @dataclass
+class ShowColumns(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    extended_kw: Optional[Keyword]
+    full_kw: Optional[Keyword]
+    columns_kw: Keyword  # COLUMNS or FIELDS
+    # the grammar shows this clause twice but I don't know what that means
+    # https://dev.mysql.com/doc/refman/8.0/en/show-columns.html
+    db_clause: MaybeClause[DatabaseClause]
+    like_clause: LikeOrWhere
+
+
+@dataclass
 class ShowTables(Statement):
     show_kw: Keyword = field(compare=False, repr=False)
     extended_kw: Optional[Keyword]
@@ -1536,6 +1548,17 @@ def _parse_show_tables(
     return ShowTables((), show, extended, full, kind_kw, db_clause, like_clause)
 
 
+def _parse_show_columns(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowColumns:
+    extended = _maybe_consume_keyword(modifiers_p, "EXTENDED")
+    full = _maybe_consume_keyword(modifiers_p, "FULL")
+    _assert_done(modifiers_p, "EXTENDED or FULL")
+    db_clause = _parse_db_clause(p)
+    like_clause = _parse_like_or_where(p)
+    return ShowColumns((), show, extended, full, kind_kw, db_clause, like_clause)
+
+
 def _parse_show_table_status(
     p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
 ) -> ShowTableStatus:
@@ -1611,6 +1634,8 @@ _SHOW_KIND_TO_PARSER: Dict[str, _ShowParser] = {
     "COUNT": _parse_show_count,
     "WARNINGS": _parse_show_warnings_or_errors,
     "ERRORS": _parse_show_warnings_or_errors,
+    "COLUMNS": _parse_show_columns,
+    "FIELDS": _parse_show_columns,
 }
 _SHOW_KINDS = list(_SHOW_KIND_TO_PARSER)
 _EOF = Token(TokenType.eof, "", Location("", 0, 0))
