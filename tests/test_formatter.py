@@ -191,6 +191,12 @@ def test_select() -> None:
     )
     assert format("select a.* from a, b") == "SELECT a.*\nFROM a, b\n"
 
+    assert format("select a from b for update") == "SELECT a\nFROM b\nFOR UPDATE\n"
+    assert (
+        format("select a from b for update skip locked")
+        == "SELECT a\nFROM b\nFOR UPDATE SKIP LOCKED\n"
+    )
+
 
 def test_expression():
     assert (

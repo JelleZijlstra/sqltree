@@ -428,6 +428,12 @@ class WithClause(Node):
 
 
 @dataclass
+class LockMode(Clause):
+    mode: KeywordSequence  # FOR UPDATE, FOR SHARE
+    modifier: Optional[Union[Keyword, KeywordSequence]]  # NOWAIT, SKIP LOCKED
+
+
+@dataclass
 class PlaceholderClause(Clause):
     placeholder: Placeholder
 
@@ -452,6 +458,7 @@ class Select(Statement):
     having: MaybeClause[HavingClause] = None
     order_by: MaybeClause[OrderByClause] = None
     limit: MaybeClause[SelectLimitClause] = None
+    lock_mode: MaybeClause[LockMode] = None
 
 
 @dataclass
@@ -1143,6 +1150,18 @@ def _parse_select_limit_clause(p: Parser) -> Optional[SelectLimitClause]:
     return None
 
 
+def _parse_lock_mode(p: Parser) -> Optional[LockMode]:
+    lock_mode = _maybe_consume_keyword_sequence(p, ["FOR", "UPDATE"])
+    if lock_mode is None:
+        lock_mode = _maybe_consume_keyword_sequence(p, ["FOR", "SHARE"])
+        if lock_mode is None:
+            return None
+    modifier = _maybe_consume_keyword(p, "NOWAIT")
+    if modifier is None:
+        modifier = _maybe_consume_keyword_sequence(p, ["SKIP", "LOCKED"])
+    return LockMode(lock_mode, modifier)
+
+
 def _parse_update(p: Parser) -> Update:
     kw = _expect_keyword(p, "UPDATE")
     table = _parse_table_reference(p)
@@ -1253,6 +1272,7 @@ def _parse_single_select(p: Parser) -> Select:
     having_clause = _parse_maybe_clause(p, _parse_having_clause)
     order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
     select_limit_clause = _parse_maybe_clause(p, _parse_select_limit_clause)
+    lock_mode = _parse_maybe_clause(p, _parse_lock_mode)
 
     return Select(
         (),
@@ -1266,6 +1286,7 @@ def _parse_single_select(p: Parser) -> Select:
         having_clause,
         order_by_clause,
         select_limit_clause,
+        lock_mode,
     )
 
 

@@ -360,6 +360,7 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.having)
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
+        self.maybe_visit(node.lock_mode)
 
     def visit_UnionStatement(self, node: p.UnionStatement) -> None:
         always_parens = bool(node.order_by or node.limit)
