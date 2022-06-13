@@ -199,6 +199,12 @@ class Parenthesized(Expression):
 
 
 @dataclass
+class Binary(Expression):
+    binary_kw: Keyword = field(compare=False, repr=False)
+    expr: Expression
+
+
+@dataclass
 class ElseClause(Node):
     else_kw: Keyword
     expr: Expression
@@ -1938,6 +1944,7 @@ def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expressio
 
 
 def _parse_simple_expression(p: Parser) -> Expression:
+    # https://dev.mysql.com/doc/refman/8.0/en/expressions.html
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation:
         if token.text == "*":
@@ -1972,6 +1979,9 @@ def _parse_simple_expression(p: Parser) -> Expression:
             return _parse_case_expression(p)
         elif token.text == "NULL":
             return NullExpression(Keyword(token, token.text))
+        elif token.text == "BINARY":
+            expr = _parse_simple_expression(p)
+            return Binary(Keyword(token, token.text), expr)
         elif _next_is_punctuation(p, "("):
             kw = Keyword(token, token.text)
             return _parse_function_call(p, KeywordIdentifier(kw))
