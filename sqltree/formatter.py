@@ -297,11 +297,6 @@ class Formatter(Visitor[None]):
         self.write_comma_list(node.values, with_space=False)
         self.visit(node.close_paren)
 
-    def visit_OdkuClause(self, node: p.OdkuClause) -> None:
-        self.start_new_line()
-        self.visit(node.kwseq)
-        self.write_comma_list(node.assignments)
-
     def visit_Assignment(self, node: p.Assignment) -> None:
         self.visit(node.col_name)
         self.add_space()
@@ -581,14 +576,6 @@ class Formatter(Visitor[None]):
         self.add_space()
         self.visit(node.search_condition)
 
-    def visit_JoinUsing(self, node: p.JoinUsing) -> None:
-        self.start_new_line()
-        self.visit(node.kw)
-        self.add_space()
-        self.visit(node.left_paren)
-        self.write_comma_list(node.join_column_list)
-        self.visit(node.right_paren)
-
     def visit_SimpleJoinedTable(self, node: p.SimpleJoinedTable):
         self.visit_join(node)
 
@@ -662,22 +649,6 @@ class Formatter(Visitor[None]):
         if node.characteristics:
             self.add_space()
             self.write_comma_list(node.characteristics)
-
-    def visit_DropTable(self, node: p.DropTable) -> None:
-        self.visit(node.drop_kw)
-        self.add_space()
-        if node.temporary_kw is not None:
-            self.visit(node.temporary_kw)
-            self.add_space()
-        self.visit(node.table_kw)
-        self.add_space()
-        if node.if_exists is not None:
-            self.visit(node.if_exists)
-            self.add_space()
-        self.write_comma_list(node.tables)
-        if node.tail is not None:
-            self.add_space()
-            self.visit(node.tail)
 
     def visit_Flush(self, node: p.Flush) -> None:
         self.visit(node.flush_kw)
