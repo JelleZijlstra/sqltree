@@ -1,8 +1,9 @@
 import argparse
+import collections.abc
 import sys
 import typing
 from contextlib import contextmanager
-from dataclasses import dataclass, field, fields
+from dataclasses import Field, dataclass, field, fields
 from typing import (
     Any,
     Dict,
@@ -296,11 +297,6 @@ class Formatter(Visitor[None]):
         self.write_comma_list(node.values, with_space=False)
         self.visit(node.close_paren)
 
-    def visit_OdkuClause(self, node: p.OdkuClause) -> None:
-        self.start_new_line()
-        self.visit(node.kwseq)
-        self.write_comma_list(node.assignments)
-
     def visit_Assignment(self, node: p.Assignment) -> None:
         self.visit(node.col_name)
         self.add_space()
@@ -580,14 +576,6 @@ class Formatter(Visitor[None]):
         self.add_space()
         self.visit(node.search_condition)
 
-    def visit_JoinUsing(self, node: p.JoinUsing) -> None:
-        self.start_new_line()
-        self.visit(node.kw)
-        self.add_space()
-        self.visit(node.left_paren)
-        self.write_comma_list(node.join_column_list)
-        self.visit(node.right_paren)
-
     def visit_SimpleJoinedTable(self, node: p.SimpleJoinedTable):
         self.visit_join(node)
 
@@ -662,21 +650,14 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.write_comma_list(node.characteristics)
 
-    def visit_DropTable(self, node: p.DropTable) -> None:
-        self.visit(node.drop_kw)
+    def visit_Flush(self, node: p.Flush) -> None:
+        self.visit(node.flush_kw)
         self.add_space()
-        if node.temporary_kw is not None:
-            self.visit(node.temporary_kw)
-            self.add_space()
-        self.visit(node.table_kw)
-        self.add_space()
-        if node.if_exists is not None:
-            self.visit(node.if_exists)
-            self.add_space()
-        self.write_comma_list(node.tables)
-        if node.tail is not None:
-            self.add_space()
-            self.visit(node.tail)
+        self.maybe_visit(node.modifier, add_space=True)
+        if isinstance(node.option, p.TablesOption):
+            self.visit(node.option)
+        else:
+            self.write_comma_list(node.option)
 
     def generic_visit(self, node: p.Node) -> None:
         """For unhandled nodes, we try to generate the formatter."""
@@ -687,41 +668,9 @@ class Formatter(Visitor[None]):
         if is_statement or is_clause:
             lines.append("self.start_new_line()")
         for i, field_obj in enumerate(fields(typ)):
-            if is_statement and field_obj.name == "leading_comments":
-                continue
-            origin, args = _get_origin_args(field_obj.type)
-            if origin is Union:
-                is_optional = NoneType in args
-                types = {t for t in args if t is not NoneType}
-            else:
-                is_optional = False
-                types = {field_obj.type}
-            if types <= {
-                p.Keyword,
-                p.KeywordSequence,
-                p.StringLiteral,
-                p.Identifier,
-                p.Expression,
-            }:
-                if is_optional:
-                    if i == 0 and (is_statement or is_clause):
-                        raise NotImplementedError(f"{type(node)}")
-                    lines.append(f"if node.{field_obj.name} is not None:")
-                    lines.append("    self.add_space()")
-                    lines.append(f"    self.visit(node.{field_obj.name})")
-                else:
-                    if i > 0 or (not is_statement and not is_clause):
-                        lines.append("self.add_space()")
-                    lines.append(f"self.visit(node.{field_obj.name})")
-            elif types == {p.Punctuation}:
-                lines.append(f"self.write_punctuation(node.{field_obj.name})")
-            elif all(isinstance(t, type) and issubclass(t, p.Node) for t in types):
-                if is_optional:
-                    lines.append(f"self.maybe_visit(node.{field_obj.name})")
-                else:
-                    lines.append(f"self.visit(node.{field_obj.name})")
-            else:
-                raise NotImplementedError(f"{type(node)}: {field_obj}")
+            lines += _get_lines_for_field(
+                node, i, field_obj, is_statement=is_statement, is_clause=is_clause
+            )
 
         body = "".join(f"    {line}\n" for line in lines)
         func_name = f"visit_{typ.__name__}"
@@ -733,6 +682,51 @@ class Formatter(Visitor[None]):
         setattr(type(self), func_name, func)
 
 
+def _get_lines_for_field(
+    node: p.Node, i: int, field_obj: Field, *, is_statement: bool, is_clause: bool
+) -> Iterator[str]:
+    if is_statement and field_obj.name == "leading_comments":
+        return
+    origin, args = _get_origin_args(field_obj.type)
+    if (origin in (typing.Sequence, collections.abc.Sequence)) and len(args) == 1:
+        sub_origin, _ = _get_origin_args(args[0])
+        if sub_origin is p.WithTrailingComma:
+            yield f"self.write_comma_list(node.{field_obj.name})"
+            return
+    if origin is Union:
+        is_optional = NoneType in args
+        types = {t for t in args if t is not NoneType}
+    else:
+        is_optional = False
+        types = {field_obj.type}
+    if types <= {
+        p.Keyword,
+        p.KeywordSequence,
+        p.StringLiteral,
+        p.Identifier,
+        p.Expression,
+    }:
+        if is_optional:
+            if i == 0 and (is_statement or is_clause):
+                raise NotImplementedError(f"{type(node)}")
+            yield f"if node.{field_obj.name} is not None:"
+            yield "    self.add_space()"
+            yield f"    self.visit(node.{field_obj.name})"
+        else:
+            if i > 0 or (not is_statement and not is_clause):
+                yield "self.add_space()"
+            yield f"self.visit(node.{field_obj.name})"
+    elif types == {p.Punctuation}:
+        yield f"self.write_punctuation(node.{field_obj.name})"
+    elif all(isinstance(t, type) and issubclass(t, p.Node) for t in types):
+        if is_optional:
+            yield f"self.maybe_visit(node.{field_obj.name})"
+        else:
+            yield f"self.visit(node.{field_obj.name})"
+    else:
+        raise NotImplementedError(f"{type(node)}: {field_obj}")
+
+
 def _get_origin_args(obj: Any) -> Tuple[object, Sequence[object]]:
     if sys.version_info >= (3, 8):
         return typing.get_origin(obj), typing.get_args(obj)
@@ -741,6 +735,8 @@ def _get_origin_args(obj: Any) -> Tuple[object, Sequence[object]]:
             return obj.__origin__, obj.__args__
         return None, ()
     else:
+        if isinstance(obj, tuple) and len(obj) == 2:
+            return obj
         if hasattr(obj, "_subs_tree"):
             origin, *args = obj._subs_tree()
             return origin, args

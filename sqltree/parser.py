@@ -666,7 +666,7 @@ class ShowTriggers(Statement):
 
 
 @dataclass
-class ChannelClause(Clause):
+class ChannelClause(Node):
     for_kw: Keyword = field(compare=False, repr=False)
     channel_kw: Keyword = field(compare=False, repr=False)
     channel: StringLiteral
@@ -731,6 +731,30 @@ class Explain(Statement):
     explain_kw: Keyword
     explain_type: Optional[ExplainType]
     statement: Statement
+
+
+@dataclass
+class RelayLogs(Node):
+    relay_kw: Keyword = field(compare=False, repr=False)
+    logs_kw: Keyword = field(compare=False, repr=False)
+    channel_clause: Optional[ChannelClause] = None
+
+
+FlushOption = Union[Keyword, KeywordSequence, RelayLogs]
+
+
+@dataclass
+class TablesOption(Node):
+    tables_kw: Keyword = field(compare=False, repr=False)
+    tables: Sequence[WithTrailingComma[TableName]]
+    modifier: Optional[KeywordSequence]
+
+
+@dataclass
+class Flush(Statement):
+    flush_kw: Keyword = field(compare=False, repr=False)
+    modifier: Optional[Keyword]
+    option: Union[Sequence[WithTrailingComma[FlushOption]], TablesOption]
 
 
 def parse(tokens: Iterable[Token], dialect: Dialect) -> Statement:
@@ -1442,6 +1466,15 @@ def _parse_string_literal(p: Parser) -> StringLiteral:
     return StringLiteral(token, text)
 
 
+def _parse_channel_clause(p: Parser) -> Optional[ChannelClause]:
+    for_kw = _maybe_consume_keyword(p, "FOR")
+    if for_kw is None:
+        return None
+    channel = _expect_keyword(p, "CHANNEL")
+    channel_name = _parse_string_literal(p)
+    return ChannelClause(for_kw, channel, channel_name)
+
+
 def _parse_show_replica_status(
     p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
 ) -> Union[ShowReplicas, ShowReplicaStatus]:
@@ -1454,13 +1487,7 @@ def _parse_show_replica_status(
             return ShowReplicas((), show, KeywordSequence([kind_kw, kw]))
     else:
         status = _expect_keyword(p, "STATUS")
-    for_kw = _maybe_consume_keyword(p, "FOR")
-    if for_kw is not None:
-        channel = _expect_keyword(p, "CHANNEL")
-        channel_name = _parse_string_literal(p)
-        channel_clause = ChannelClause(for_kw, channel, channel_name)
-    else:
-        channel_clause = None
+    channel_clause = _parse_channel_clause(p)
     return ShowReplicaStatus((), show, kind_kw, status, channel_clause)
 
 
@@ -1623,6 +1650,60 @@ def _parse_with(p: Parser) -> Statement:
     raise ParseError.from_unexpected_token(token, "SELECT, UPDATE, or DELETE")
 
 
+def _parse_tables_option(p: Parser) -> TablesOption:
+    kw = _expect_keyword(p, "TABLES")
+    kwseq = _maybe_consume_keyword_sequence(p, ["WITH", "READ", "LOCK"])
+    if kwseq is not None:
+        return TablesOption(kw, (), kwseq)
+    ident = _maybe_parse_identifier(p)
+    if ident is None:
+        return TablesOption(kw, (), None)
+    p.pi.wind_back()
+    tables = _parse_comma_separated(p, _parse_table_name)
+    kwseq = _maybe_consume_keyword_sequence(p, ["WITH", "READ", "LOCK"])
+    if kwseq is None:
+        kwseq = _maybe_consume_keyword_sequence(p, ["FOR", "EXPORT"])
+    return TablesOption(kw, tables, kwseq)
+
+
+def _parse_flush_option(p: Parser) -> FlushOption:
+    kw = _expect_one_of_keywords(
+        p,
+        [
+            "BINARY",
+            "ENGINE",
+            "ERROR",
+            "GENERAL",
+            "HOSTS",
+            "LOGS",
+            "PRIVILEGES",
+            "OPTIMIZER_COSTS",
+            "RELAY",
+            "SLOW",
+            "STATUS",
+            "USER_RESOURCES",
+        ],
+    )
+    kw_text = kw.text.upper()
+    if kw_text in ("BINARY", "ENGINE", "ERROR", "GENERAL", "RELAY", "SLOW"):
+        logs_kw = _expect_keyword(p, "LOGS")
+        if kw_text == "RELAY":
+            clause = _parse_channel_clause(p)
+            return RelayLogs(kw, logs_kw, clause)
+        return KeywordSequence([kw, logs_kw])
+    return kw
+
+
+def _parse_flush(p: Parser) -> Flush:
+    kw = _expect_keyword(p, "FLUSH")
+    modifier = _maybe_consume_one_of_keywords(p, ["LOCAL", "NO_WRITE_TO_BINLOG"])
+    if _next_is_keyword(p, "TABLES"):
+        option = _parse_tables_option(p)
+    else:
+        option = _parse_comma_separated(p, _parse_flush_option)
+    return Flush((), kw, modifier, option)
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
@@ -1639,6 +1720,7 @@ _VERB_TO_PARSER = {
     "EXPLAIN": _parse_explain,
     "DESCRIBE": _parse_explain,
     "DESC": _parse_explain,
+    "FLUSH": _parse_flush,
 }
 
 
