@@ -735,6 +735,8 @@ def _get_origin_args(obj: Any) -> Tuple[object, Sequence[object]]:
             return obj.__origin__, obj.__args__
         return None, ()
     else:
+        if isinstance(obj, tuple) and len(obj) == 2:
+            return obj
         if hasattr(obj, "_subs_tree"):
             origin, *args = obj._subs_tree()
             return origin, args
