@@ -512,6 +512,11 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.else_clause, add_space=True)
         self.visit(node.end_kw)
 
+    def visit_Distinct(self, node: p.Distinct) -> None:
+        self.visit(node.distinct_kw)
+        self.add_space()
+        self.visit(node.expr)
+
     def visit_BinOp(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()
         if precedence >= p.MIN_BOOLEAN_PRECEDENCE:
