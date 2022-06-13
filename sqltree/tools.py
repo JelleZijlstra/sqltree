@@ -9,7 +9,7 @@ from typing import Sequence
 
 from .api import sqltree
 from .dialect import DEFAULT_DIALECT, Dialect
-from .parser import Dotted, Identifier, IntoClause, SimpleTableFactor
+from .parser import Dotted, DottedTable, Identifier, IntoClause, SimpleTableName
 from .visitor import walk
 
 
@@ -19,13 +19,10 @@ def get_tables(sql: str, dialect: Dialect = DEFAULT_DIALECT) -> Sequence[str]:
 
     tables = []
     for node in walk(tree):
-        if isinstance(node, SimpleTableFactor):
-            if isinstance(node.table_name, Identifier):
-                tables.append(node.table_name.text)
-            else:
-                tables.append(
-                    f"{node.table_name.left.text}.{node.table_name.right.text}"
-                )
+        if isinstance(node, SimpleTableName):
+            tables.append(node.identifier.text)
+        elif isinstance(node, DottedTable):
+            tables.append(f"{node.left.text}.{node.right.text}")
         elif isinstance(node, IntoClause):
             if isinstance(node.table, Identifier):
                 tables.append(node.table.text)
