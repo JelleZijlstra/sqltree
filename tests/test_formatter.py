@@ -210,6 +210,8 @@ def test_expression():
         == "SELECT x\nWHERE LEFT(y, 5) = 'x'\n"
     )
 
+    assert format("select binary 'x'") == "SELECT BINARY 'x'\n"
+
 
 def test_literals() -> None:
     assert format("select 'x'") == "SELECT 'x'\n"
