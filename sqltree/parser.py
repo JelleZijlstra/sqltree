@@ -791,16 +791,16 @@ def _parse_join_specification(p: Parser) -> Optional[JoinSpecification]:
 
 def _parse_index(p: Parser) -> Union[Identifier, Keyword]:
     token = _next_or_else(p, "identifier")
-    if token.typ is not TokenType.identifier:
-        if token.typ is TokenType.string:
-            delimiter = p.dialect.get_identifier_delimiter()
-            if token.text[0] == delimiter == token.text[-1]:
-                identifier = token.text[1:-1]
-                return Identifier(token, identifier)
-        elif _token_is_keyword(p, token, "PRIMARY"):
-            return Keyword(token, token.text)
-        raise ParseError.from_unexpected_token(token, "identifier")
-    return Identifier(token, token.text)
+    if token.typ is TokenType.identifier:
+        return Identifier(token, token.text)
+    elif token.typ is TokenType.string:
+        delimiter = p.dialect.get_identifier_delimiter()
+        if token.text[0] == delimiter == token.text[-1]:
+            identifier = token.text[1:-1]
+            return Identifier(token, identifier)
+    elif _token_is_keyword(p, token, "PRIMARY"):
+        return Keyword(token, token.text)
+    raise ParseError.from_unexpected_token(token, "identifier")
 
 
 def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
@@ -1626,14 +1626,14 @@ def _maybe_parse_identifier(p: Parser) -> Optional[Identifier]:
 
 def _parse_identifier(p: Parser) -> Identifier:
     token = _next_or_else(p, "identifier")
-    if token.typ is not TokenType.identifier:
-        if token.typ is TokenType.string:
-            delimiter = p.dialect.get_identifier_delimiter()
-            if token.text[0] == delimiter == token.text[-1]:
-                identifier = token.text[1:-1]
-                return Identifier(token, identifier)
-        raise ParseError.from_unexpected_token(token, "identifier")
-    return Identifier(token, token.text)
+    if token.typ is TokenType.identifier:
+        return Identifier(token, token.text)
+    elif token.typ is TokenType.string:
+        delimiter = p.dialect.get_identifier_delimiter()
+        if token.text[0] == delimiter == token.text[-1]:
+            identifier = token.text[1:-1]
+            return Identifier(token, identifier)
+    raise ParseError.from_unexpected_token(token, "identifier")
 
 
 def _parse_select_expr(p: Parser) -> SelectExpr:
