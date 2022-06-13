@@ -1,9 +1,9 @@
 import argparse
+import collections.abc
 import sys
 import typing
-import collections.abc
 from contextlib import contextmanager
-from dataclasses import dataclass, field, fields, Field
+from dataclasses import Field, dataclass, field, fields
 from typing import (
     Any,
     Dict,
