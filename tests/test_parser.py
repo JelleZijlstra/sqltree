@@ -16,7 +16,11 @@ def test() -> None:
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
         p.FromClause(
             p.Keyword(T, "FROM"),
-            [p.WithTrailingComma(p.SimpleTableFactor(p.Identifier(T, "a")))],
+            [
+                p.WithTrailingComma(
+                    p.SimpleTableFactor(p.SimpleTableName(p.Identifier(T, "a")))
+                )
+            ],
         ),
     )
 
@@ -40,7 +44,11 @@ def test() -> None:
         ],
         p.FromClause(
             p.Keyword(T, "FROM"),
-            [p.WithTrailingComma(p.SimpleTableFactor(p.Identifier(T, "a")))],
+            [
+                p.WithTrailingComma(
+                    p.SimpleTableFactor(p.SimpleTableName(p.Identifier(T, "a")))
+                )
+            ],
         ),
         p.WhereClause(
             p.Keyword(T, "WHERE"),
@@ -89,6 +97,10 @@ def test() -> None:
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
         p.FromClause(
             p.Keyword(T, "FROM"),
-            [p.WithTrailingComma(p.SimpleTableFactor(p.Identifier(T, "a")))],
+            [
+                p.WithTrailingComma(
+                    p.SimpleTableFactor(p.SimpleTableName(p.Identifier(T, "a")))
+                )
+            ],
         ),
     )

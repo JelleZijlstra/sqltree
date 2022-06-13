@@ -627,6 +627,9 @@ class Formatter(Visitor[None]):
             if index_hint.trailing_comma is not None:
                 self.visit(index_hint.trailing_comma)
 
+    def visit_SimpleTableName(self, node: p.SimpleTableName) -> None:
+        self.visit(node.identifier)
+
     def visit_SubQueryFactor(self, node: p.SubqueryFactor) -> None:
         self.maybe_visit(node.lateral_kw, add_space=True)
         self.visit(node.table_subquery)
@@ -706,6 +709,7 @@ def _get_lines_for_field(
         p.Identifier,
         p.Expression,
         p.DottedTable,
+        p.SimpleTableName,
     }:
         if is_optional:
             if i == 0 and (is_statement or is_clause):

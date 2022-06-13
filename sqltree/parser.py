@@ -137,6 +137,11 @@ class DottedTable(Node):
 
 
 @dataclass
+class SimpleTableName(Node):
+    identifier: Identifier
+
+
+@dataclass
 class StringLiteral(Expression, Leaf):
     value: str
 
@@ -310,7 +315,7 @@ class NaturalJoinedTable(Node):
 
 
 JoinedTable = Union[SimpleJoinedTable, LeftRightJoinedTable, NaturalJoinedTable]
-TableName = Union[Identifier, DottedTable]
+TableName = Union[SimpleTableName, DottedTable]
 
 
 @dataclass
@@ -936,7 +941,7 @@ def _parse_table_name(p: Parser) -> TableName:
     if dot is not None:
         right = _parse_identifier(p)
         return DottedTable(identifier, dot, right)
-    return identifier
+    return SimpleTableName(identifier)
 
 
 def _parse_table_factor(p: Parser) -> TableFactor:
