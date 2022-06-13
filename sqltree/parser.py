@@ -675,6 +675,13 @@ class DropTable(Statement):
 
 
 @dataclass
+class Truncate(Statement):
+    truncate_kw: Keyword = field(compare=False, repr=False)
+    table_kw: Optional[Keyword]
+    table: TableName
+
+
+@dataclass
 class DatabaseClause(Node):
     kw: Keyword  # FROM or IN
     db_name: Identifier
@@ -1844,6 +1851,13 @@ def _parse_flush(p: Parser) -> Flush:
     return Flush((), kw, modifier, option)
 
 
+def _parse_truncate(p: Parser) -> Truncate:
+    kw = _expect_keyword(p, "TRUNCATE")
+    table_kw = _maybe_consume_keyword(p, "TABLE")
+    table = _parse_table_name(p)
+    return Truncate((), kw, table_kw, table)
+
+
 _VERB_TO_PARSER = {
     "SELECT": _parse_select,
     "UPDATE": _parse_update,
@@ -1861,6 +1875,7 @@ _VERB_TO_PARSER = {
     "DESCRIBE": _parse_explain,
     "DESC": _parse_explain,
     "FLUSH": _parse_flush,
+    "TRUNCATE": _parse_truncate,
 }
 
 
