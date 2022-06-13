@@ -705,6 +705,7 @@ def _get_lines_for_field(
         p.StringLiteral,
         p.Identifier,
         p.Expression,
+        p.DottedTable,
     }:
         if is_optional:
             if i == 0 and (is_statement or is_clause):

@@ -630,7 +630,7 @@ class DropTable(Statement):
 
 
 @dataclass
-class DatabaseClause(Clause):
+class DatabaseClause(Node):
     kw: Keyword  # FROM or IN
     db_name: Identifier
 
@@ -650,10 +650,21 @@ class ShowColumns(Statement):
     extended_kw: Optional[Keyword]
     full_kw: Optional[Keyword]
     columns_kw: Keyword  # COLUMNS or FIELDS
-    # the grammar shows this clause twice but I don't know what that means
-    # https://dev.mysql.com/doc/refman/8.0/en/show-columns.html
+    from_kw: Keyword  # FROM, IN
+    table_name: TableName
     db_clause: MaybeClause[DatabaseClause]
     like_clause: LikeOrWhere
+
+
+@dataclass
+class ShowIndex(Statement):
+    show_kw: Keyword = field(compare=False, repr=False)
+    extended_kw: Optional[Keyword]
+    index_kw: Keyword  # INDEX, INDEXES, KEYS
+    from_kw: Keyword  # FROM, IN
+    table_name: TableName
+    db_clause: MaybeClause[DatabaseClause]
+    where_clause: MaybeClause[WhereClause]
 
 
 @dataclass
@@ -1554,9 +1565,27 @@ def _parse_show_columns(
     extended = _maybe_consume_keyword(modifiers_p, "EXTENDED")
     full = _maybe_consume_keyword(modifiers_p, "FULL")
     _assert_done(modifiers_p, "EXTENDED or FULL")
+    from_kw = _expect_one_of_keywords(p, ["FROM", "IN"])
+    table = _parse_table_name(p)
     db_clause = _parse_db_clause(p)
     like_clause = _parse_like_or_where(p)
-    return ShowColumns((), show, extended, full, kind_kw, db_clause, like_clause)
+    return ShowColumns(
+        (), show, extended, full, kind_kw, from_kw, table, db_clause, like_clause
+    )
+
+
+def _parse_show_index(
+    p: Parser, show: Keyword, modifiers_p: Parser, kind_kw: Keyword
+) -> ShowIndex:
+    extended = _maybe_consume_keyword(modifiers_p, "EXTENDED")
+    _assert_done(modifiers_p, "EXTENDED")
+    from_kw = _expect_one_of_keywords(p, ["FROM", "IN"])
+    table = _parse_table_name(p)
+    db_clause = _parse_db_clause(p)
+    where_clause = _parse_where_clause(p)
+    return ShowIndex(
+        (), show, extended, kind_kw, from_kw, table, db_clause, where_clause
+    )
 
 
 def _parse_show_table_status(
@@ -1636,6 +1665,9 @@ _SHOW_KIND_TO_PARSER: Dict[str, _ShowParser] = {
     "ERRORS": _parse_show_warnings_or_errors,
     "COLUMNS": _parse_show_columns,
     "FIELDS": _parse_show_columns,
+    "INDEX": _parse_show_index,
+    "INDEXES": _parse_show_index,
+    "KEYS": _parse_show_index,
 }
 _SHOW_KINDS = list(_SHOW_KIND_TO_PARSER)
 _EOF = Token(TokenType.eof, "", Location("", 0, 0))

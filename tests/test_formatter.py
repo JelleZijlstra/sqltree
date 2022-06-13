@@ -506,45 +506,53 @@ def test_show_tables() -> None:
     assert format("show tables") == "SHOW TABLES\n"
     assert (
         format("show extended full tables from x")
-        == "SHOW EXTENDED FULL TABLES\nFROM x\n"
+        == "SHOW EXTENDED FULL TABLES FROM x\n"
     )
-    assert format("show tables in x") == "SHOW TABLES\nIN x\n"
-    assert format("show tables in x like 'y'") == "SHOW TABLES\nIN x\nLIKE 'y'\n"
-    assert format("show tables in x where z = 3") == "SHOW TABLES\nIN x\nWHERE z = 3\n"
+    assert format("show tables in x") == "SHOW TABLES IN x\n"
+    assert format("show tables in x like 'y'") == "SHOW TABLES IN x\nLIKE 'y'\n"
+    assert format("show tables in x where z = 3") == "SHOW TABLES IN x\nWHERE z = 3\n"
 
 
 def test_show_columns() -> None:
-    assert format("show columns") == "SHOW COLUMNS\n"
     assert (
         format("show extended full columns from x")
-        == "SHOW EXTENDED FULL COLUMNS\nFROM x\n"
+        == "SHOW EXTENDED FULL COLUMNS FROM x\n"
     )
-    assert format("show columns in x") == "SHOW COLUMNS\nIN x\n"
-    assert format("show columns in x like 'y'") == "SHOW COLUMNS\nIN x\nLIKE 'y'\n"
-    assert (
-        format("show columns in x where z = 3") == "SHOW COLUMNS\nIN x\nWHERE z = 3\n"
-    )
+    assert format("show columns in x") == "SHOW COLUMNS IN x\n"
+    assert format("show columns in x from y") == "SHOW COLUMNS IN x FROM y\n"
+    assert format("show columns in x like 'y'") == "SHOW COLUMNS IN x\nLIKE 'y'\n"
+    assert format("show columns in x where z = 3") == "SHOW COLUMNS IN x\nWHERE z = 3\n"
+    assert format("show fields in x where z = 3") == "SHOW FIELDS IN x\nWHERE z = 3\n"
+
+
+def test_show_index() -> None:
+    assert format("show extended index from x") == "SHOW EXTENDED INDEX FROM x\n"
+    assert format("show index in x") == "SHOW INDEX IN x\n"
+    assert format("show index in x from y") == "SHOW INDEX IN x FROM y\n"
+    assert format("show index in x where z = 3") == "SHOW INDEX IN x\nWHERE z = 3\n"
+    assert format("show indexes in x where z = 3") == "SHOW INDEXES IN x\nWHERE z = 3\n"
+    assert format("show keys in x where z = 3") == "SHOW KEYS IN x\nWHERE z = 3\n"
 
 
 def test_show_triggers() -> None:
     assert format("show triggers") == "SHOW TRIGGERS\n"
-    assert format("show triggers in x") == "SHOW TRIGGERS\nIN x\n"
-    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS\nIN x\nLIKE 'y'\n"
+    assert format("show triggers in x") == "SHOW TRIGGERS IN x\n"
+    assert format("show triggers in x like 'y'") == "SHOW TRIGGERS IN x\nLIKE 'y'\n"
     assert (
-        format("show triggers in x where z = 3") == "SHOW TRIGGERS\nIN x\nWHERE z = 3\n"
+        format("show triggers in x where z = 3") == "SHOW TRIGGERS IN x\nWHERE z = 3\n"
     )
 
 
 def test_show_table_status() -> None:
     assert format("show table status") == "SHOW TABLE STATUS\n"
-    assert format("show table status in x") == "SHOW TABLE STATUS\nIN x\n"
+    assert format("show table status in x") == "SHOW TABLE STATUS IN x\n"
     assert (
         format("show table status in x like 'y'")
-        == "SHOW TABLE STATUS\nIN x\nLIKE 'y'\n"
+        == "SHOW TABLE STATUS IN x\nLIKE 'y'\n"
     )
     assert (
         format("show table status in x where z = 3")
-        == "SHOW TABLE STATUS\nIN x\nWHERE z = 3\n"
+        == "SHOW TABLE STATUS IN x\nWHERE z = 3\n"
     )
 
 
