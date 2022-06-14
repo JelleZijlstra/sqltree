@@ -738,3 +738,12 @@ def test_create_table() -> None:
 def test_rename_tables() -> None:
     assert format("rename table x to y") == "RENAME TABLE x TO y\n"
     assert format("rename table x to y, z to w") == "RENAME TABLE x TO y, z TO w\n"
+
+
+def test_placeholder() -> None:
+    assert format("select * from x where x = ?") == "SELECT *\nFROM x\nWHERE x = ?\n"
+    assert format("select * from x where x = %s") == "SELECT *\nFROM x\nWHERE x = %s\n"
+    assert (
+        format("select * from x where x = %(x)s")
+        == "SELECT *\nFROM x\nWHERE x = %(x)s\n"
+    )
