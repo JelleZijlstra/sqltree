@@ -471,7 +471,24 @@ class PlaceholderClause(Clause):
     placeholder: Placeholder
 
 
+@dataclass
+class SeparatorClause(Node):
+    separator_kw: Keyword = field(compare=False, repr=False)
+    separator: Union[StringLiteral, Placeholder]
+
+
 MaybeClause = Union[NodeT, PlaceholderClause, None]
+
+
+@dataclass
+class GroupConcat(Expression):
+    group_concat_kw: Identifier = field(repr=False, compare=False)
+    left_paren: Punctuation = field(repr=False, compare=False)
+    distinct_kw: Optional[Keyword]
+    exprs: Sequence[WithTrailingComma[Expression]]
+    order_by: MaybeClause[OrderByClause]
+    separator: MaybeClause[SeparatorClause]
+    right_paren: Punctuation = field(repr=False, compare=False)
 
 
 @dataclass
@@ -2236,6 +2253,32 @@ def _parse_cast(cast_kw: Identifier, p: Parser) -> Cast:
     return Cast(cast_kw, left_paren, expr, as_kw, cast_type, array_kw, right_paren)
 
 
+def _parse_separator_clause(p: Parser) -> Optional[SeparatorClause]:
+    kw = _maybe_consume_keyword(p, "SEPARATOR")
+    if kw is None:
+        return None
+    sep = _parse_string_literal(p)
+    return SeparatorClause(kw, sep)
+
+
+def _parse_group_concat(group_concat_kw: Identifier, p: Parser) -> GroupConcat:
+    left_paren = _expect_punctuation(p, "(")
+    distinct_kw = _maybe_consume_keyword(p, "DISTINCT")
+    exprs = _parse_comma_separated(p, _parse_expression)
+    order_by = _parse_maybe_clause(p, _parse_order_by_clause)
+    separator = _parse_maybe_clause(p, _parse_separator_clause)
+    right_paren = _expect_punctuation(p, ")")
+    return GroupConcat(
+        group_concat_kw,
+        left_paren,
+        distinct_kw,
+        exprs,
+        order_by,
+        separator,
+        right_paren,
+    )
+
+
 def _parse_simple_expression(p: Parser) -> Expression:
     # https://dev.mysql.com/doc/refman/8.0/en/expressions.html
     token = _next_or_else(p, "expression")
@@ -2254,8 +2297,11 @@ def _parse_simple_expression(p: Parser) -> Expression:
             operand = _parse_simple_expression(p)
             return UnaryOp(op, operand)
     elif token.typ is TokenType.identifier:
-        if token.text.upper() == "CAST":
-            return _parse_cast(Identifier(token, token.text.upper()), p)
+        keyword_text = token.text.upper()
+        if keyword_text == "CAST":
+            return _parse_cast(Identifier(token, keyword_text), p)
+        elif keyword_text == "GROUP_CONCAT":
+            return _parse_group_concat(Identifier(token, keyword_text), p)
         expr = Identifier(token, token.text)
         return _parse_identifier_expression(p, expr)
     elif token.typ is TokenType.number:

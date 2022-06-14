@@ -172,7 +172,7 @@ class Formatter(Visitor[None]):
                 self.write(else_write)
                 if add_space:
                     self.add_space()
-            return None
+            return
         self.visit(node)
         if add_space:
             self.add_space()
@@ -516,6 +516,21 @@ class Formatter(Visitor[None]):
         self.visit(node.distinct_kw)
         self.add_space()
         self.visit(node.expr)
+
+    def visit_GroupConcat(self, node: p.GroupConcat) -> None:
+        self.visit(node.group_concat_kw)
+        self.write_punctuation(node.left_paren)
+        self.maybe_visit(node.distinct_kw, add_space=True)
+        self.write_comma_list(node.exprs, with_space=False)
+        if node.order_by is not None:
+            self.add_space()
+            if isinstance(node.order_by, p.OrderByClause):
+                self.visit(node.order_by.kwseq)
+                self.write_comma_list(node.order_by.expr)
+            else:
+                self.visit_Placeholder(node.order_by.placeholder)
+        self.maybe_visit(node.separator)
+        self.write_punctuation(node.right_paren)
 
     def visit_BinOp(self, node: p.BinOp) -> None:
         precedence = node.get_precedence()
