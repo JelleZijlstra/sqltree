@@ -89,6 +89,16 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             if next_char is not None and next_char.isalpha():
                 token_type = TokenType.placeholder
                 text = "%" + _consume_identifier(pi)
+            elif next_char == "(":
+                token_type = TokenType.placeholder
+                pi.next()
+                text = "%("
+                text += _consume_identifier(pi)
+                next_char = pi.next()
+                if next_char != ")":
+                    raise TokenizeError(f"expected ')', got {next_char!r}")
+                text += ")"
+                text += _consume_identifier(pi)
             elif next_char == "%":
                 pi.next()
                 token_type = TokenType.punctuation
@@ -96,6 +106,9 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             else:
                 token_type = TokenType.punctuation
                 text = "%"
+        elif char == "?":
+            token_type = TokenType.placeholder
+            text = char
         elif char in starting_char_to_continuations:
             token_type = TokenType.punctuation
             continuations = starting_char_to_continuations[char]
