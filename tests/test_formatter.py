@@ -291,6 +291,52 @@ def test_cast() -> None:
     assert format("select cast(1 as year)") == "SELECT CAST(1 AS YEAR)\n"
 
 
+def test_group_concat() -> None:
+    assert format("select group_concat(a)") == "SELECT GROUP_CONCAT(a)\n"
+    assert (
+        format("select group_concat(distinct a)") == "SELECT GROUP_CONCAT(DISTINCT a)\n"
+    )
+    assert (
+        format("select group_concat(distinct a, b)")
+        == "SELECT GROUP_CONCAT(DISTINCT a, b)\n"
+    )
+    assert (
+        format("select group_concat(distinct a order by b)")
+        == "SELECT GROUP_CONCAT(DISTINCT a ORDER BY b)\n"
+    )
+    assert (
+        format('select group_concat(a separator ",")')
+        == "SELECT GROUP_CONCAT(a SEPARATOR ',')\n"
+    )
+
+
+def test_aggregate_functtions() -> None:
+    assert format("select avg(x)") == "SELECT avg(x)\n"
+    assert format("select avg(distinct x)") == "SELECT avg(DISTINCT x)\n"
+    assert format("select bit_and(x)") == "SELECT bit_and(x)\n"
+    assert format("select bit_or(x)") == "SELECT bit_or(x)\n"
+    assert format("select bit_xor(x)") == "SELECT bit_xor(x)\n"
+    assert format("select count(x)") == "SELECT count(x)\n"
+    assert format("select count(distinct x)") == "SELECT count(DISTINCT x)\n"
+    assert format("select json_arrayagg(x)") == "SELECT json_arrayagg(x)\n"
+    assert format("select json_objectagg(x, y)") == "SELECT json_objectagg(x, y)\n"
+    assert format("select max(x)") == "SELECT max(x)\n"
+    assert format("select max(distinct x)") == "SELECT max(DISTINCT x)\n"
+    assert format("select min(x)") == "SELECT min(x)\n"
+    # Why does MIN() support DISTINCT even though it doesn't do anything,
+    # but STDDEV doesn't?
+    assert format("select min(distinct x)") == "SELECT min(DISTINCT x)\n"
+    assert format("select std(x)") == "SELECT std(x)\n"
+    assert format("select stddev(x)") == "SELECT stddev(x)\n"
+    assert format("select stddev_pop(x)") == "SELECT stddev_pop(x)\n"
+    assert format("select stddev_samp(x)") == "SELECT stddev_samp(x)\n"
+    assert format("select sum(x)") == "SELECT sum(x)\n"
+    assert format("select sum(distinct x)") == "SELECT sum(DISTINCT x)\n"
+    assert format("select var_pop(x)") == "SELECT var_pop(x)\n"
+    assert format("select var_samp(x)") == "SELECT var_samp(x)\n"
+    assert format("select variance(x)") == "SELECT variance(x)\n"
+
+
 def test_literals() -> None:
     assert format("select 'x'") == "SELECT 'x'\n"
     assert format('select "x"') == "SELECT 'x'\n"
