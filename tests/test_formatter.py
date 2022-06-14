@@ -733,3 +733,8 @@ def test_create_table() -> None:
     assert format("create table x like y") == "CREATE TABLE x LIKE y\n"
     assert format("create table x (like y)") == "CREATE TABLE x (LIKE y)\n"
     assert format("create table a.b (like c.d)") == "CREATE TABLE a.b (LIKE c.d)\n"
+
+
+def test_rename_tables() -> None:
+    assert format("rename table x to y") == "RENAME TABLE x TO y\n"
+    assert format("rename table x to y, z to w") == "RENAME TABLE x TO y, z TO w\n"
