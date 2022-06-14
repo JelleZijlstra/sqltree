@@ -237,6 +237,9 @@ def test_expression():
 
     assert format("select binary 'x'") == "SELECT BINARY 'x'\n"
 
+    assert format("select a mod b") == "SELECT a MOD b\n"
+    assert format("select a div b") == "SELECT a DIV b\n"
+
 
 def test_cast() -> None:
     assert format("select cast(1 as binary)") == "SELECT CAST(1 AS BINARY)\n"

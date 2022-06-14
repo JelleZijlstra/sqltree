@@ -86,6 +86,11 @@ formatting SQL. Here is how to use it:
 
 ## Changelog
 
+### Unreleased
+
+- Support `a MOD B` and `a DIV b` syntax
+- Support `GROUP_CONCAT()` syntax
+
 ### Version 0.1.0 (June 13, 2022)
 
 - Initial release
