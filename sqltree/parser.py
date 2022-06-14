@@ -708,6 +708,20 @@ class Truncate(Statement):
 
 
 @dataclass
+class TableTo(Node):
+    table: TableName
+    to_kw: Keyword = field(compare=False, repr=False)
+    new_table: TableName
+
+
+@dataclass
+class RenameTables(Statement):
+    rename_kw: Keyword = field(compare=False, repr=False)
+    table_kw: Keyword = field(compare=False, repr=False)
+    tables: Sequence[WithTrailingComma[TableTo]]
+
+
+@dataclass
 class DatabaseClause(Node):
     kw: Keyword  # FROM or IN
     db_name: Identifier
@@ -1884,6 +1898,20 @@ def _parse_truncate(p: Parser) -> Truncate:
     return Truncate((), kw, table_kw, table)
 
 
+def _parse_table_to(p: Parser) -> TableTo:
+    old = _parse_table_name(p)
+    to = _expect_keyword(p, "TO")
+    new = _parse_table_name(p)
+    return TableTo(old, to, new)
+
+
+def _parse_rename(p: Parser) -> RenameTables:
+    kw = _expect_keyword(p, "RENAME")
+    table_kw = _expect_keyword(p, "TABLE")
+    table_to = _parse_comma_separated(p, _parse_table_to)
+    return RenameTables((), kw, table_kw, table_to)
+
+
 def _parse_create(p: Parser) -> CreateTable:
     kw = _expect_keyword(p, "CREATE")
     temporary = _maybe_consume_keyword(p, "TEMPORARY")
@@ -1927,6 +1955,7 @@ _VERB_TO_PARSER = {
     "FLUSH": _parse_flush,
     "TRUNCATE": _parse_truncate,
     "CREATE": _parse_create,
+    "RENAME": _parse_rename,
 }
 
 
