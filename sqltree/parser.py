@@ -492,6 +492,49 @@ class GroupConcat(Expression):
 
 
 @dataclass
+class KwSeqString(Node):
+    kwseq: KeywordSequence
+    string: Union[StringLiteral, Placeholder]
+
+
+@dataclass
+class FieldsOptions(Node):
+    fields_kw: Keyword
+    terminated_by: Optional[KwSeqString]
+    enclosed_by: Optional[KwSeqString]
+    escaped_by: Optional[KwSeqString]
+
+
+@dataclass
+class LinesOptions(Node):
+    fields_kw: Keyword
+    starting_by: Optional[KwSeqString]
+    terminated_by: Optional[KwSeqString]
+
+
+@dataclass
+class IntoOutfile(Clause):
+    into_kw: Keyword = field(repr=False, compare=False)
+    outfile_kw: Keyword = field(repr=False, compare=False)
+    filename: Union[StringLiteral, Placeholder]
+    charset: Optional[CharsetInfo]
+    fields_options: Optional[FieldsOptions]
+    lines_options: Optional[LinesOptions]
+
+
+@dataclass
+class IntoDumpfile(Clause):
+    into_kw: Keyword = field(repr=False, compare=False)
+    dumpfile_kw: Keyword = field(repr=False, compare=False)
+    filename: Union[StringLiteral, Placeholder]
+
+
+# TODO INTO @var_name. Note that "@ var_name" is illegal, this needs
+# tokenizer work.
+IntoOption = Union[IntoOutfile, IntoDumpfile]
+
+
+@dataclass
 class Statement(Node):
     leading_comments: Sequence[Comment] = field(repr=False)
 
@@ -502,13 +545,16 @@ class Select(Statement):
     select_kw: Keyword = field(compare=False, repr=False)
     modifiers: Sequence[Keyword]
     select_exprs: Sequence[WithTrailingComma[SelectExpr]]
+    into_before_from: MaybeClause[IntoOption] = None
     from_clause: MaybeClause[FromClause] = None
     where: MaybeClause[WhereClause] = None
     group_by: MaybeClause[GroupByClause] = None
     having: MaybeClause[HavingClause] = None
     order_by: MaybeClause[OrderByClause] = None
     limit: MaybeClause[SelectLimitClause] = None
+    into_before_lock_mode: MaybeClause[IntoOption] = None
     lock_mode: MaybeClause[LockMode] = None
+    into: MaybeClause[IntoOption] = None
 
 
 @dataclass
@@ -1361,6 +1407,49 @@ def _parse_select(p: Parser) -> Union[Select, UnionStatement]:
     return UnionStatement((), first, rest, order_by_clause, select_limit_clause)
 
 
+def _parse_kwseq_string(p: Parser, keywords: Sequence[str]) -> Optional[KwSeqString]:
+    kwseq = _maybe_consume_keyword_sequence(p, keywords)
+    if kwseq is None:
+        return None
+    s = _parse_string_literal(p)
+    return KwSeqString(kwseq, s)
+
+
+def _parse_fields_options(p: Parser) -> Optional[FieldsOptions]:
+    kw = _maybe_consume_one_of_keywords(p, ["FIELDS", "COLUMNS"])
+    if kw is None:
+        return None
+    term = _parse_kwseq_string(p, ["TERMINATED", "BY"])
+    enclosed = _parse_kwseq_string(p, ["OPTIONALLY", "ENCLOSED", "BY"])
+    if enclosed is None:
+        enclosed = _parse_kwseq_string(p, ["ENCLOSED", "BY"])
+    escaped = _parse_kwseq_string(p, ["ESCAPED", "BY"])
+    return FieldsOptions(kw, term, enclosed, escaped)
+
+
+def _parse_lines_options(p: Parser) -> Optional[LinesOptions]:
+    kw = _maybe_consume_keyword(p, "LINES")
+    if kw is None:
+        return None
+    start = _parse_kwseq_string(p, ["STARTING", "BY"])
+    term = _parse_kwseq_string(p, ["TERMINATED", "BY"])
+    return LinesOptions(kw, start, term)
+
+
+def _parse_into_option(p: Parser) -> Optional[IntoOption]:
+    into_kw = _maybe_consume_keyword(p, "INTO")
+    if into_kw is None:
+        return None
+    next_kw = _expect_one_of_keywords(p, ["OUTFILE", "DUMPFILE"])
+    filename = _parse_string_literal(p)
+    if next_kw.text == "DUMPFILE":
+        return IntoDumpfile(into_kw, next_kw, filename)
+    charset = _parse_char_set_info(p)
+    fields_opts = _parse_fields_options(p)
+    lines_opts = _parse_lines_options(p)
+    return IntoOutfile(into_kw, next_kw, filename, charset, fields_opts, lines_opts)
+
+
 def _parse_single_select(p: Parser) -> Select:
     if p.dialect.supports_feature(Feature.with_clause) and _next_is_keyword(p, "WITH"):
         with_clause = _parse_with_clause(p)
@@ -1375,13 +1464,16 @@ def _parse_single_select(p: Parser) -> Select:
             modifiers.append(kw)
     select_exprs = _parse_comma_separated(p, _parse_select_expr)
 
+    into1 = _parse_maybe_clause(p, _parse_into_option)
     from_clause = _parse_maybe_clause(p, _parse_from_clause)
     where_clause = _parse_maybe_clause(p, _parse_where_clause)
     group_by_clause = _parse_maybe_clause(p, _parse_group_by_clause)
     having_clause = _parse_maybe_clause(p, _parse_having_clause)
     order_by_clause = _parse_maybe_clause(p, _parse_order_by_clause)
     select_limit_clause = _parse_maybe_clause(p, _parse_select_limit_clause)
+    into2 = _parse_maybe_clause(p, _parse_into_option)
     lock_mode = _parse_maybe_clause(p, _parse_lock_mode)
+    into3 = _parse_maybe_clause(p, _parse_into_option)
 
     return Select(
         (),
@@ -1389,13 +1481,16 @@ def _parse_single_select(p: Parser) -> Select:
         select,
         modifiers,
         select_exprs,
+        into1,
         from_clause,
         where_clause,
         group_by_clause,
         having_clause,
         order_by_clause,
         select_limit_clause,
+        into2,
         lock_mode,
+        into3,
     )
 
 
@@ -2227,10 +2322,16 @@ def _parse_identifier_expression(p: Parser, identifier: Identifier) -> Expressio
     return identifier
 
 
-def _parse_char_set_info(p: Parser) -> Optional[Union[CharsetInfo, Keyword]]:
+def _parse_char_set_info_or_shortcut(
+    p: Parser,
+) -> Optional[Union[CharsetInfo, Keyword]]:
     simple = _maybe_consume_one_of_keywords(p, ["ASCII", "UNICODE"])
     if simple is not None:
         return simple
+    return _parse_char_set_info(p)
+
+
+def _parse_char_set_info(p: Parser) -> Optional[CharsetInfo]:
     character_kw = _maybe_consume_keyword(p, "CHARACTER")
     if character_kw is None:
         return None
@@ -2270,12 +2371,12 @@ def _parse_cast_type(p: Parser) -> CastType:
     elif _next_is_punctuation(p, "("):
         call = _parse_function_call(p, KeywordIdentifier(kw))
         if kw.text == "CHAR":
-            charset = _parse_char_set_info(p)
+            charset = _parse_char_set_info_or_shortcut(p)
             return CharType(call, charset)
         else:
             return call
     elif kw.text == "CHAR":
-        charset = _parse_char_set_info(p)
+        charset = _parse_char_set_info_or_shortcut(p)
         return CharType(kw, charset)
     else:
         return kw
