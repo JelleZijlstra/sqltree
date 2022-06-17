@@ -88,6 +88,8 @@ formatting SQL. Here is how to use it:
 
 ### Unreleased
 
+- Support `SELECT ... INTO` syntax
+- Support `SET TRANSACTION` syntax
 - Support `a MOD B` and `a DIV b` syntax
 - Support `GROUP_CONCAT()` syntax
 

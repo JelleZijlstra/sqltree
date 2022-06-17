@@ -198,6 +198,52 @@ def test_select() -> None:
     )
 
 
+def test_select_into() -> None:
+    # locations for INTO
+    assert format("select 1 into outfile 'x'") == "SELECT 1\nINTO OUTFILE 'x'\n"
+    assert (
+        format("select 1 into outfile 'x' from x")
+        == "SELECT 1\nINTO OUTFILE 'x'\nFROM x\n"
+    )
+    assert (
+        format("select 1 from x into outfile 'x' for update")
+        == "SELECT 1\nFROM x\nINTO OUTFILE 'x'\nFOR UPDATE\n"
+    )
+    assert (
+        format("select 1 from x for update into outfile 'x'")
+        == "SELECT 1\nFROM x\nFOR UPDATE\nINTO OUTFILE 'x'\n"
+    )
+
+    # INTO DUMPFILE
+    assert format("select 1 into dumpfile 'x'") == "SELECT 1\nINTO DUMPFILE 'x'\n"
+
+    # INTO OUTFILE
+    assert (
+        format("select 1 into outfile 'x' character set ascii")
+        == "SELECT 1\nINTO OUTFILE 'x' CHARACTER SET ascii\n"
+    )
+    assert (
+        format(
+            "select 1 into outfile 'x' character set ascii fields terminated by 'x'"
+            " enclosed by 'y' escaped by 'z' lines starting by 'alpha' terminated by"
+            " 'beta'"
+        )
+        == "SELECT 1\nINTO OUTFILE 'x' CHARACTER SET ascii FIELDS TERMINATED BY 'x'"
+        " ENCLOSED BY 'y' ESCAPED BY 'z' LINES STARTING BY 'alpha' TERMINATED BY"
+        " 'beta'\n"
+    )
+    assert (
+        format(
+            "select 1 into outfile 'x' character set ascii columns terminated by 'x'"
+            " enclosed by 'y' escaped by 'z' lines starting by 'alpha' terminated by"
+            " %s"
+        )
+        == "SELECT 1\nINTO OUTFILE 'x' CHARACTER SET ascii COLUMNS TERMINATED BY 'x'"
+        " ENCLOSED BY 'y' ESCAPED BY 'z' LINES STARTING BY 'alpha' TERMINATED BY"
+        " %s\n"
+    )
+
+
 def test_count() -> None:
     # TODO: maybe uppercase COUNT
     assert format("select count(*) from x") == "SELECT count(*)\nFROM x\n"

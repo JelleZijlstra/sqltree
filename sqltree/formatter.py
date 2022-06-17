@@ -354,13 +354,16 @@ class Formatter(Visitor[None]):
             self.add_space()
             self.visit(kw)
         self.write_comma_list(node.select_exprs)
+        self.maybe_visit(node.into_before_from)
         self.maybe_visit(node.from_clause)
         self.maybe_visit(node.where)
         self.maybe_visit(node.group_by)
         self.maybe_visit(node.having)
         self.maybe_visit(node.order_by)
         self.maybe_visit(node.limit)
+        self.maybe_visit(node.into_before_lock_mode)
         self.maybe_visit(node.lock_mode)
+        self.maybe_visit(node.into)
 
     def visit_UnionStatement(self, node: p.UnionStatement) -> None:
         always_parens = bool(node.order_by or node.limit)

@@ -14,6 +14,7 @@ def test() -> None:
         p.Keyword(T, "SELECT"),
         [],
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
+        None,
         p.FromClause(
             p.Keyword(T, "FROM"),
             [
@@ -42,6 +43,7 @@ def test() -> None:
                 )
             ),
         ],
+        None,
         p.FromClause(
             p.Keyword(T, "FROM"),
             [
@@ -95,6 +97,7 @@ def test() -> None:
         p.Keyword(T, "SELECT"),
         [],
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
+        None,
         p.FromClause(
             p.Keyword(T, "FROM"),
             [
