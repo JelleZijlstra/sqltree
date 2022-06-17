@@ -682,6 +682,24 @@ class RollbackStatement(Statement):
 
 
 @dataclass
+class IsolationLevel(Node):
+    isolation_kw: Keyword = field(compare=False, repr=False)
+    level_kw: Keyword = field(compare=False, repr=False)
+    level: KeywordSequence
+
+
+TransactionCharacteristic = Union[IsolationLevel, KeywordSequence]
+
+
+@dataclass
+class SetTransaction(Statement):
+    set_kw: Keyword = field(compare=False, repr=False)
+    scope_kw: Optional[Keyword]
+    transaction_kw: Keyword = field(compare=False, repr=False)
+    characteristics: Sequence[WithTrailingComma[TransactionCharacteristic]]
+
+
+@dataclass
 class DropTable(Statement):
     drop_kw: Keyword = field(compare=False, repr=False)
     temporary_kw: Optional[Keyword]
@@ -993,15 +1011,9 @@ def _parse_index_hint(p: Parser) -> Optional[IndexHint]:
     kind_kw = Keyword(token, token.text)
     for_kw = _maybe_consume_keyword(p, "FOR")
     if for_kw is not None:
-        for_what = _maybe_consume_keyword(p, "JOIN")
-        if for_what is None:
-            for_what = _maybe_consume_keyword_sequence(p, ["ORDER", "BY"])
-            if for_what is None:
-                for_what = _maybe_consume_keyword_sequence(p, ["GROUP", "BY"])
-                if for_what is None:
-                    expected = "JOIN, ORDER BY, or GROUP BY"
-                    token = _next_or_else(p, expected)
-                    raise ParseError.from_unexpected_token(token, expected)
+        for_what = _expect_one_of_kwseqs(
+            p, [["JOIN"], ["ORDER", "BY"], ["GROUP", "BY"]]
+        )
     else:
         for_what = None
     left_paren = _expect_punctuation(p, "(")
@@ -1581,6 +1593,31 @@ def _parse_rollback(p: Parser) -> RollbackStatement:
     return RollbackStatement((), commit, work, chain, release)
 
 
+def _parse_characteristic(p: Parser) -> TransactionCharacteristic:
+    isolation_kw = _maybe_consume_keyword(p, "ISOLATION")
+    if isolation_kw is not None:
+        level_kw = _expect_keyword(p, "LEVEL")
+        level = _expect_one_of_kwseqs(
+            p,
+            [
+                ["REPEATABLE", "READ"],
+                ["READ", "UNCOMMITTED"],
+                ["READ", "COMMITTED"],
+                ["SERIALIZABLE"],
+            ],
+        )
+        return IsolationLevel(isolation_kw, level_kw, level)
+    return _expect_one_of_kwseqs(p, [["READ", "WRITE"], ["READ", "ONLY"]])
+
+
+def _parse_set_transaction(p: Parser) -> SetTransaction:
+    set_kw = _expect_keyword(p, "SET")
+    scope_kw = _maybe_consume_one_of_keywords(p, ["GLOBAL", "SESSION"])
+    transaction_kw = _expect_keyword(p, "TRANSACTION")
+    characteristics = _parse_comma_separated(p, _parse_characteristic)
+    return SetTransaction((), set_kw, scope_kw, transaction_kw, characteristics)
+
+
 def _parse_drop(p: Parser) -> DropTable:
     drop = _expect_keyword(p, "DROP")
     temporary = _maybe_consume_keyword(p, "TEMPORARY")
@@ -1973,6 +2010,7 @@ _VERB_TO_PARSER = {
     "TRUNCATE": _parse_truncate,
     "CREATE": _parse_create,
     "RENAME": _parse_rename,
+    "SET": _parse_set_transaction,
 }
 
 
@@ -2378,6 +2416,16 @@ def _maybe_consume_keyword_sequence(
     for _ in range(consumed):
         p.pi.wind_back()
     return None
+
+
+def _expect_one_of_kwseqs(p: Parser, seqs: Sequence[Sequence[str]]) -> KeywordSequence:
+    for seq in seqs:
+        kwseq = _maybe_consume_keyword_sequence(p, seq)
+        if kwseq is not None:
+            return kwseq
+    raise ParseError.from_unexpected_token(
+        p.pi.next(), "one of " + ", ".join(" ".join(seq) for seq in seqs)
+    )
 
 
 def _token_is_keyword(p: Parser, token: Optional[Token], keyword: str) -> bool:
