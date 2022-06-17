@@ -618,6 +618,25 @@ def test_rollback() -> None:
     assert format("rollback and chain no release") == "ROLLBACK AND CHAIN NO RELEASE\n"
 
 
+def test_set_transaction() -> None:
+    assert (
+        format("set transaction isolation level repeatable read")
+        == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ\n"
+    )
+    assert (
+        format("set global transaction isolation level repeatable read")
+        == "SET GLOBAL TRANSACTION ISOLATION LEVEL REPEATABLE READ\n"
+    )
+    assert (
+        format("set session transaction isolation level repeatable read")
+        == "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ\n"
+    )
+    assert (
+        format("set transaction isolation level repeatable read, read write")
+        == "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ WRITE\n"
+    )
+
+
 def test_drop_table() -> None:
     assert format("drop table x") == "DROP TABLE x\n"
     assert (
