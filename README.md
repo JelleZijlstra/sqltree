@@ -86,7 +86,7 @@ formatting SQL. Here is how to use it:
 
 ## Changelog
 
-### Unreleased
+### Version 0.2.0 (June 24, 2022)
 
 - Support `SELECT ... INTO` syntax
 - Support `SET TRANSACTION` syntax
