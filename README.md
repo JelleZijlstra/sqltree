@@ -86,6 +86,10 @@ formatting SQL. Here is how to use it:
 
 ## Changelog
 
+### Unreleased
+
+- Fix formatting of `LEFT JOIN` and similar queries
+
 ### Version 0.2.0 (June 24, 2022)
 
 - Support `SELECT ... INTO` syntax
