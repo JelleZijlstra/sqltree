@@ -485,6 +485,17 @@ def test_table_reference() -> None:
         """
     )
     assert (
+        format("select x from a left join b on 1", indent=12)
+        == """
+            SELECT x
+            FROM
+                a
+            LEFT JOIN
+                b
+            ON 1
+        """
+    )
+    assert (
         format("select x from a join b join c", indent=12)
         == """
             SELECT x

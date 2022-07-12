@@ -631,9 +631,8 @@ class Formatter(Visitor[None]):
                 self.start_new_line()
                 self.visit(node.left)
         self.start_new_line()
-        for kw in kws:
-            if kw is not None:
-                self.visit(kw)
+        kws = [kw for kw in kws if kw is not None]
+        self.visit_KeywordSequence(p.KeywordSequence(kws))
         with self.add_indent():
             self.start_new_line()
             self.visit(node.right)
