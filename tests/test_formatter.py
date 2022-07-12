@@ -270,6 +270,7 @@ def test_expression():
     assert format("select -1 + 1") == "SELECT -1 + 1\n"
     assert format("select -~1") == "SELECT -(~1)\n"
     assert format("select x where y is null") == "SELECT x\nWHERE y IS NULL\n"
+    assert format("select x where not y is null") == "SELECT x\nWHERE NOT y IS NULL\n"
     assert format("select x where y is not null") == "SELECT x\nWHERE y IS NOT NULL\n"
     assert (
         format("select x where left(y, 5) = 'x'")

@@ -88,6 +88,7 @@ formatting SQL. Here is how to use it:
 
 ### Unreleased
 
+- Support the unary `NOT` operator
 - Fix formatting of `LEFT JOIN` and similar queries
 
 ### Version 0.2.0 (June 24, 2022)
