@@ -162,7 +162,12 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             char = pi.peek()
             if char == "e" or char == "E":
                 pi.next()
-                text += "e" + _consume_integer(pi)
+                text += char
+                char = pi.peek()
+                if char == "-":
+                    pi.next()
+                    text += "-"
+                text += _consume_integer(pi)
         elif char in QUOTATIONS:
             token_type = TokenType.string
             text = char + _consume_until(pi, char)
