@@ -394,6 +394,9 @@ def test_literals() -> None:
     assert format("select 1") == "SELECT 1\n"
     assert format("select 1.0") == "SELECT 1.0\n"
     assert format("select 1.0e10") == "SELECT 1.0e10\n"
+    assert format("select 1.0E10") == "SELECT 1.0e10\n"
+    assert format("select 1.0e-10") == "SELECT 1.0e-10\n"
+    assert format("select 1E-2 ") == "SELECT 1e-2\n"
 
 
 def test_union() -> None:
