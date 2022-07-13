@@ -42,6 +42,10 @@ def test_select() -> None:
     )
     with pytest.raises(ParseError):
         format(select_limit_all)
+    assert (
+        format('select "FROM" from "SELECT"', Dialect(Vendor.ansi))
+        == 'SELECT "FROM"\nFROM "SELECT"\n'
+    )
 
     assert (
         format(
