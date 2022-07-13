@@ -17,7 +17,7 @@ Home = "https://github.com/JelleZijlstra/sqltree"
 target_version = ['py36']
 include = '\.pyi?$'
 skip-magic-trailing-comma = true
-experimental-string-processing = true
+preview = true
 
 [project.requires-extra]
 fixit = ["fixit"]
