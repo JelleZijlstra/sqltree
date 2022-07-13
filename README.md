@@ -86,7 +86,7 @@ formatting SQL. Here is how to use it:
 
 ## Changelog
 
-### Unreleased
+### Version 0.3.0 (July 12, 2022)
 
 - Add ANSI SQL as a dialect
 - Support escaping quotes by doubling them in string literals
