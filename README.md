@@ -88,6 +88,7 @@ formatting SQL. Here is how to use it:
 
 ### Unreleased
 
+- Fix formatting for quoted identifiers that contain non-alphanumeric characters
 - Support the unary `NOT` operator
 - Fix formatting of `LEFT JOIN` and similar queries
 
