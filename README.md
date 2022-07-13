@@ -88,6 +88,7 @@ formatting SQL. Here is how to use it:
 
 ### Unreleased
 
+- Support escaping quotes by doubling them in string literals
 - Support scientific notation with a negative exponent
 - Fix formatting for quoted identifiers that contain non-alphanumeric characters
 - Support the unary `NOT` operator

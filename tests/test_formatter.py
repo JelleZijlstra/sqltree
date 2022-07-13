@@ -390,6 +390,7 @@ def test_aggregate_functtions() -> None:
 
 def test_literals() -> None:
     assert format("select 'x'") == "SELECT 'x'\n"
+    assert format("select '''x'") == "SELECT '''x'\n"
     assert format('select "x"') == "SELECT 'x'\n"
     assert format("select 1") == "SELECT 1\n"
     assert format("select 1.0") == "SELECT 1.0\n"

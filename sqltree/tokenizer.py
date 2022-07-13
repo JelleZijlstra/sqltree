@@ -170,7 +170,7 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
                 text += _consume_integer(pi)
         elif char in QUOTATIONS:
             token_type = TokenType.string
-            text = char + _consume_until(pi, char)
+            text = char + _consume_string_literal(pi, char)
         elif char == "{":
             token_type = TokenType.placeholder
             text = "{" + _consume_until(pi, "}")
@@ -178,18 +178,30 @@ def tokenize(sql: str, dialect: Dialect) -> Iterable[Token]:
             token_type = TokenType.comment
             text = "#" + _consume_until(pi, "\n", eof_okay=True)
         else:
-            # TODO comments. Maybe we leave those out of the AST in the parser, then reattach
-            # them later at the nearest node we find. Or we just attach them to the token and make
-            # sure each token object stays in the AST.
             raise TokenizeError(f"unexpected character {char}")
         yield Token(token_type, text, Location(sql, start_index, pi.next_pos - 1))
+
+
+def _consume_string_literal(pi: PeekingIterator[str], end: str) -> str:
+    chars = []
+    for c in pi:
+        chars.append(c)
+        # TODO backslash escapes
+        # https://dev.mysql.com/doc/refman/8.0/en/string-literals.html
+        if c == end:
+            char = pi.peek()
+            # In a '-quoted string, you can use '' to escape a '
+            if char == end:
+                pi.next()
+                continue
+            return "".join(chars)
+    raise TokenizeError(f"unexpected EOF (expected {end!r})")
 
 
 def _consume_until(pi: PeekingIterator[str], end: str, eof_okay: bool = False) -> str:
     chars = []
     for c in pi:
         chars.append(c)
-        # TODO backslash escapes?
         if c == end:
             return "".join(chars)
     if eof_okay:
