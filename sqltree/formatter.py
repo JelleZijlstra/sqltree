@@ -463,8 +463,9 @@ class Formatter(Visitor[None]):
         self.write(node.value.lower())
 
     def visit_StringLiteral(self, node: p.StringLiteral) -> None:
+        inner = node.value.replace("'", "''")
         # ' is more portable
-        self.write(f"'{node.value}'")
+        self.write(f"'{inner}'")
 
     def visit_NullExpression(self, node: p.NullExpression) -> None:
         self.visit(node.null_kw)
