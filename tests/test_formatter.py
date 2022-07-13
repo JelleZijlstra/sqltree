@@ -196,6 +196,7 @@ def test_select() -> None:
         format("select a from b for update skip locked")
         == "SELECT a\nFROM b\nFOR UPDATE SKIP LOCKED\n"
     )
+    assert format("select 1 as `x y`") == "SELECT 1 AS `x y`\n"
 
 
 def test_select_into() -> None:
@@ -494,6 +495,16 @@ def test_table_reference() -> None:
             LEFT JOIN
                 b
             ON 1
+        """
+    )
+    assert (
+        format("select x from a cross join b", indent=12)
+        == """
+            SELECT x
+            FROM
+                a
+            CROSS JOIN
+                b
         """
     )
     assert (

@@ -434,7 +434,9 @@ class Formatter(Visitor[None]):
         self.visit(node.keyword)
 
     def visit_Identifier(self, node: p.Identifier) -> None:
-        if node.text.upper() in self.dialect.get_keywords():
+        if (node.text.upper() in self.dialect.get_keywords()) or any(
+            not c.isalnum() and c != "_" for c in node.text
+        ):
             delimiter = self.dialect.get_identifier_delimiter()
             self.write(f"{delimiter}{node.text}{delimiter}")
         else:
