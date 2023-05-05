@@ -72,9 +72,11 @@ class Dialect:
                 ("SQL_SMALL_RESULT",),
                 ("SQL_BIG_RESULT",),
                 ("SQL_BUFFER_RESULT",),
-                ("SQL_NO_CACHE",)
-                if version_is_in(self.version, start_version=(8,))
-                else ("SQL_CACHE", "SQL_NO_CACHE"),
+                (
+                    ("SQL_NO_CACHE",)
+                    if version_is_in(self.version, start_version=(8,))
+                    else ("SQL_CACHE", "SQL_NO_CACHE")
+                ),
                 ("SQL_CALC_FOUND_ROWS",),
             ]
         elif self.vendor in {Vendor.redshift, Vendor.presto, Vendor.ansi}:

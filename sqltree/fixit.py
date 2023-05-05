@@ -19,16 +19,13 @@ class SqlFormatRule(CstLintRule):
     MESSAGE = "Reformat SQL"
 
     VALID = [
-        Valid(
-            '''
+        Valid('''
             sql = """
                 SELECT *
                 FROM x
             """
-            '''
-        ),
-        Valid(
-            '''
+            '''),
+        Valid('''
             def f():
                 sql = """
                     SELECT *
@@ -43,8 +40,7 @@ class SqlFormatRule(CstLintRule):
                        SELECT y
                        FROM z
                    """
-            '''
-        ),
+            '''),
     ]
 
     INVALID = [
