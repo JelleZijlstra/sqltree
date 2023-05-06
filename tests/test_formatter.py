@@ -336,6 +336,58 @@ def test_cast() -> None:
     assert format("select cast(1 as year)") == "SELECT CAST(1 AS YEAR)\n"
 
 
+def test_colon_cast() -> None:
+    assert format("select 1 ::binary", Dialect(Vendor.redshift)) == "SELECT 1::BINARY\n"
+    assert (
+        format("select 1::binary(5)", Dialect(Vendor.redshift))
+        == "SELECT 1::BINARY(5)\n"
+    )
+    assert format("select 1::char", Dialect(Vendor.redshift)) == "SELECT 1::CHAR\n"
+    assert (
+        format("select 1::char(5)", Dialect(Vendor.redshift)) == "SELECT 1::CHAR(5)\n"
+    )
+    assert format("select 1 :: date", Dialect(Vendor.redshift)) == "SELECT 1::DATE\n"
+    assert (
+        format("select 1 ::datetime", Dialect(Vendor.redshift))
+        == "SELECT 1::DATETIME\n"
+    )
+    assert (
+        format("select 1 :: datetime(6)", Dialect(Vendor.redshift))
+        == "SELECT 1::DATETIME(6)\n"
+    )
+    assert (
+        format("select 1 :: decimal(6)", Dialect(Vendor.redshift))
+        == "SELECT 1::DECIMAL(6)\n"
+    )
+    assert (
+        format("select 1 :: decimal(6, 7)", Dialect(Vendor.redshift))
+        == "SELECT 1::DECIMAL(6, 7)\n"
+    )
+    assert (
+        format("select 1 :: double", Dialect(Vendor.redshift)) == "SELECT 1::DOUBLE\n"
+    )
+    assert format("select 1 :: float", Dialect(Vendor.redshift)) == "SELECT 1::FLOAT\n"
+    assert (
+        format("select 1 :: float(3)", Dialect(Vendor.redshift))
+        == "SELECT 1::FLOAT(3)\n"
+    )
+    assert format("select 1 :: nchar", Dialect(Vendor.redshift)) == "SELECT 1::NCHAR\n"
+    assert (
+        format("select 1 :: nchar(5)", Dialect(Vendor.redshift))
+        == "SELECT 1::NCHAR(5)\n"
+    )
+    assert format("select 1 :: real", Dialect(Vendor.redshift)) == "SELECT 1::REAL\n"
+    assert format("select 1 :: year", Dialect(Vendor.redshift)) == "SELECT 1::YEAR\n"
+    assert (
+        format("select '1' :: double", Dialect(Vendor.redshift))
+        == "SELECT '1'::DOUBLE\n"
+    )
+    assert (
+        format("select (1) :: double", Dialect(Vendor.redshift))
+        == "SELECT (1)::DOUBLE\n"
+    )
+
+
 def test_group_concat() -> None:
     assert format("select group_concat(a)") == "SELECT GROUP_CONCAT(a)\n"
     assert (
