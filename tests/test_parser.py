@@ -3,6 +3,7 @@ from sqltree.api import sqltree
 from sqltree.dialect import Dialect, Vendor
 from sqltree.location import Location
 from sqltree.tokenizer import Token, TokenType
+from sqltree.dialect import Dialect, Vendor
 
 T = Token(TokenType.keyword, "x", Location("x", 1, 1))
 
@@ -121,7 +122,7 @@ def test() -> None:
                     p.ColonCast(
                         expr=p.Identifier(T, "a"),
                         double_colon=p.Punctuation(T, "::"),
-                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                        type_name=p.CharType(p.Keyword(T, "char"), None),
                     ),
                     None,
                     None,
@@ -162,7 +163,7 @@ def test() -> None:
                             p.Punctuation(T, ")"),
                         ),
                         double_colon=p.Punctuation(T, "::"),
-                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                        type_name=p.CharType(p.Keyword(T, "char"), None),
                     ),
                     None,
                     None,
@@ -189,7 +190,7 @@ def test() -> None:
                             p.Keyword(T, "END"),
                         ),
                         double_colon=p.Punctuation(T, "::"),
-                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                        type_name=p.CharType(p.Keyword(T, "char"), None),
                     ),
                     None,
                     None,
@@ -201,7 +202,7 @@ def test() -> None:
                     p.ColonCast(
                         expr=p.StringLiteral(T, "a"),
                         double_colon=p.Punctuation(T, "::"),
-                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                        type_name=p.CharType(p.Keyword(T, "char"), None),
                     ),
                     None,
                     None,
