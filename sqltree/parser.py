@@ -207,6 +207,12 @@ class ColonCast(Expression):
 
 
 @dataclass
+class TypedString(Expression):
+    type_name: CastType
+    string: Union[StringLiteral, Placeholder]
+
+
+@dataclass
 class ExprList(Expression):
     left_paren: Punctuation
     exprs: Sequence[WithTrailingComma[Expression]]
@@ -2372,7 +2378,14 @@ _BASIC_CAST_KEYWORD = [
 
 
 def _parse_cast_type(p: Parser) -> CastType:
-    kwseq = _expect_one_of_kwseqs(
+    casttype = _maybe_parse_cast_type(p)
+    if not casttype:
+        raise ParseError.from_unexpected_token(p.pi.peek_or_raise(), "cast type")
+    return casttype
+
+
+def _maybe_parse_cast_type(p: Parser) -> Optional[CastType]:
+    kwseq = _maybe_consume_one_of_kwseqs(
         p,
         sorted(
             [kw.split() for kw in _BASIC_CAST_KEYWORD]
@@ -2380,6 +2393,8 @@ def _parse_cast_type(p: Parser) -> CastType:
             reverse=True,
         ),
     )
+    if kwseq is None:
+        return kwseq
     if len(kwseq.keywords) == 1:
         kw = kwseq.keywords[0]
         if kw.text.upper() in ("SIGNED", "UNSIGNED"):
@@ -2404,6 +2419,17 @@ def _parse_cast_type(p: Parser) -> CastType:
         return kwseq
 
 
+def _maybe_consume_one_of_casttypes(p: Parser) -> Optional[CastType]:
+    cur_pos = p.pi.next_pos
+    casttype = _maybe_parse_cast_type(p)
+    if casttype:
+        if _next_is_stringliteral_type(p):
+            return casttype
+        else:
+            p.pi.next_pos = cur_pos
+    return None
+
+
 def _parse_cast(cast_kw: KeywordIdentifier, p: Parser) -> Cast:
     left_paren = _expect_punctuation(p, "(")
     expr = _parse_expression(p)
@@ -2420,6 +2446,11 @@ def _parse_colon_cast(expr: Expression, p: Parser) -> ColonCast:
         raise ParseError.from_disallowed(double_colon.token, p.dialect, "::")
     cast_type = _parse_cast_type(p)
     return ColonCast(expr, double_colon, cast_type)
+
+
+def _parse_typed_string(cast_type: CastType, p: Parser) -> TypedString:
+    string = _parse_string_literal(p)
+    return TypedString(cast_type, string)
 
 
 def _parse_separator_clause(p: Parser) -> Optional[SeparatorClause]:
@@ -2471,6 +2502,12 @@ def _parse_leading_simple_expression(p: Parser) -> Expression:
             return _parse_cast(KeywordIdentifier(Keyword(token, keyword_text)), p)
         elif keyword_text == "GROUP_CONCAT":
             return _parse_group_concat(Identifier(token, keyword_text), p)
+        p.pi.wind_back()
+        maybe_cast_type = _maybe_consume_one_of_casttypes(p)
+        if maybe_cast_type:
+            return _parse_typed_string(maybe_cast_type, p)
+        else:
+            p.pi.advance()
         expr = Identifier(token, token.text)
         return _parse_identifier_expression(p, expr)
     elif token.typ is TokenType.number:
@@ -2572,6 +2609,16 @@ def _expect_one_of_kwseqs(p: Parser, seqs: Sequence[Sequence[str]]) -> KeywordSe
     )
 
 
+def _maybe_consume_one_of_kwseqs(
+    p: Parser, seqs: Sequence[Sequence[str]]
+) -> Optional[KeywordSequence]:
+    for seq in seqs:
+        kwseq = _maybe_consume_keyword_sequence(p, seq)
+        if kwseq is not None:
+            return kwseq
+    return None
+
+
 def _token_is_keyword(p: Parser, token: Optional[Token], keyword: str) -> bool:
     if token is None:
         return False
@@ -2623,6 +2670,11 @@ def _maybe_consume_one_of_keywords(
         p.pi.wind_back()
         break
     return None
+
+
+def _next_is_stringliteral_type(p: Parser) -> bool:
+    token = p.pi.peek()
+    return token is not None and token.typ is TokenType.string
 
 
 def _next_or_else(p: Parser, label: str) -> Token:

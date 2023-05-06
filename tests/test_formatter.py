@@ -417,6 +417,39 @@ def test_colon_cast() -> None:
     )
 
 
+def test_typed_string() -> None:
+    assert format("select DATE'2023-01-01'") == "SELECT DATE'2023-01-01'\n"
+    assert format("select time'00:00:00'") == "SELECT TIME'00:00:00'\n"
+    assert (
+        format("select decimal(6)'1'", Dialect(Vendor.redshift))
+        == "SELECT DECIMAL(6)'1'\n"
+    )
+
+    assert format("select float '1'", Dialect(Vendor.redshift)) == "SELECT FLOAT'1'\n"
+    assert format("select real '1'", Dialect(Vendor.trino)) == "SELECT REAL'1'\n"
+    assert format("select bigint '1'", Dialect(Vendor.trino)) == "SELECT BIGINT'1'\n"
+    assert (
+        format("select datetime(6)'1'", Dialect(Vendor.redshift))
+        == "SELECT DATETIME(6)'1'\n"
+    )
+    assert (
+        format("select double PRECISION '1' ", Dialect(Vendor.redshift))
+        == "SELECT DOUBLE PRECISION'1'\n"
+    )
+    assert (
+        format(
+            "select TIME WITH TIME  zone '1997-12-17 07:37:16-08'",
+            Dialect(Vendor.redshift),
+        )
+        == "SELECT TIME WITH TIME ZONE'1997-12-17 07:37:16-08'\n"
+    )
+    assert format("select double '1'", Dialect(Vendor.redshift)) == "SELECT DOUBLE'1'\n"
+    assert format("select nchar '1'", Dialect(Vendor.redshift)) == "SELECT NCHAR'1'\n"
+    assert (
+        format("select nchar(5)'1'", Dialect(Vendor.redshift)) == "SELECT NCHAR(5)'1'\n"
+    )
+
+
 def test_group_concat() -> None:
     assert format("select group_concat(a)") == "SELECT GROUP_CONCAT(a)\n"
     assert (
