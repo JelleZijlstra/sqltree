@@ -59,6 +59,7 @@ PUNCTUATION = {
     "%%",  # Not SQL but we allow it so you can do %s substitution
     "--",  # Not a punctuation but a comment
     "/*",  # Also a comment
+    "::",  # Not a punctuation but a type cast operator
 }
 QUOTATIONS = {"`", "'", '"'}
 

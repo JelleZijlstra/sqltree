@@ -199,6 +199,13 @@ class Cast(Expression):
     right_paren: Punctuation = field(repr=False, compare=False)
 
 
+@dataclass()
+class ColonCast(Expression):
+    expr: Expression
+    double_colon: Punctuation = field(repr=False, compare=False)
+    type_name: CastType
+
+
 @dataclass
 class ExprList(Expression):
     left_paren: Punctuation
@@ -2398,6 +2405,14 @@ def _parse_cast(cast_kw: Identifier, p: Parser) -> Cast:
     return Cast(cast_kw, left_paren, expr, as_kw, cast_type, array_kw, right_paren)
 
 
+def _parse_colon_cast(expr: Expression, p: Parser) -> ColonCast:
+    double_colon = _expect_punctuation(p, "::")
+    if not p.dialect.supports_feature(Feature.colon_cast):
+        raise ParseError.from_disallowed(double_colon.token, p.dialect, "::")
+    cast_type = _parse_cast_type(p)
+    return ColonCast(expr, double_colon, cast_type)
+
+
 def _parse_separator_clause(p: Parser) -> Optional[SeparatorClause]:
     kw = _maybe_consume_keyword(p, "SEPARATOR")
     if kw is None:
@@ -2424,7 +2439,7 @@ def _parse_group_concat(group_concat_kw: Identifier, p: Parser) -> GroupConcat:
     )
 
 
-def _parse_simple_expression(p: Parser) -> Expression:
+def _parse_leading_simple_expression(p: Parser) -> Expression:
     # https://dev.mysql.com/doc/refman/8.0/en/expressions.html
     token = _next_or_else(p, "expression")
     if token.typ is TokenType.punctuation:
@@ -2478,6 +2493,14 @@ def _parse_simple_expression(p: Parser) -> Expression:
             kw = Keyword(token, token.text)
             return _parse_function_call(p, KeywordIdentifier(kw))
     raise ParseError.from_unexpected_token(token, "expression")
+
+
+def _parse_simple_expression(p: Parser) -> Expression:
+    expr = _parse_leading_simple_expression(p)
+    if _next_is_punctuation(p, "::"):
+        return _parse_colon_cast(expr, p)
+    else:
+        return expr
 
 
 def _next_is_punctuation(p: Parser, punctuation: str) -> bool:

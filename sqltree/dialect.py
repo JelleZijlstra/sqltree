@@ -28,6 +28,7 @@ class Feature(enum.Enum):
     delete_using = 10  # USING in DELETE
     comma_offset = 11  # LIMIT offset, row_count
     limit_all = 12  # LIMIT ALL
+    colon_cast = 13  # using :: for casting
 
 
 @dataclass
@@ -129,6 +130,7 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
     Feature.delete_using: {Vendor.mysql: False, Vendor.redshift: True},
     Feature.comma_offset: {Vendor.mysql: True, Vendor.redshift: False},
     Feature.limit_all: {Vendor.mysql: False, Vendor.redshift: True},
+    Feature.colon_cast: {Vendor.mysql: False, Vendor.redshift: True},
 }
 _missing_features = set(Feature) - set(_FEATURES)
 assert not _missing_features, f"missing settings for {_missing_features}"

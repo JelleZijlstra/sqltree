@@ -693,6 +693,17 @@ class Formatter(Visitor[None]):
         self.add_space()
         self.visit(node.table)
 
+    def visit_ColonCast(self, node: p.ColonCast) -> None:
+        self.visit(node.expr)
+        self.visit(node.double_colon)
+        self.visit(node.type_name)
+
+    def visit_CharType(self, node: p.CharType) -> None:
+        self.visit(node.call)
+        if node.charset:
+            self.add_space()
+            self.visit(node.charset)
+
     def generic_visit(self, node: p.Node) -> None:
         """For unhandled nodes, we try to generate the formatter."""
         typ = type(node)
