@@ -10,6 +10,7 @@ class Vendor(enum.Enum):
     presto = 2
     redshift = 3
     ansi = 4
+    trino = 5
 
 
 class Feature(enum.Enum):
@@ -80,7 +81,7 @@ class Dialect:
                 ),
                 ("SQL_CALC_FOUND_ROWS",),
             ]
-        elif self.vendor in {Vendor.redshift, Vendor.presto, Vendor.ansi}:
+        elif self.vendor in {Vendor.redshift, Vendor.presto, Vendor.ansi, Vendor.trino}:
             return [("ALL", "DISTINCT")]
         else:
             raise NotImplementedError(self.vendor)
@@ -122,6 +123,7 @@ _FEATURES: Dict[Feature, Dict[Vendor, Union[bool, Tuple[Version, Version]]]] = {
         Vendor.mysql: False,
         Vendor.presto: True,
         Vendor.redshift: True,
+        Vendor.trino: True,
     },
     Feature.require_from_for_delete: {Vendor.mysql: True, Vendor.redshift: False},
     Feature.update_limit: {Vendor.mysql: True, Vendor.redshift: False},
@@ -138,6 +140,7 @@ _IDENTIFIER_QUOTE = {
     Vendor.presto: '"',
     Vendor.redshift: '"',  # https://docs.aws.amazon.com/redshift/latest/dg/r_names.html
     Vendor.ansi: '"',
+    Vendor.trino: '"',
 }
 
 
@@ -1014,6 +1017,90 @@ ANSI_KEYWORDS = {
     "UNTIL",
     "WHILE",
 }
+# https://trino.io/docs/current/language/reserved.html
+TRINO_KEYWORDS = {
+    "ALTER",
+    "AND",
+    "AS",
+    "BETWEEN",
+    "BY",
+    "CASE",
+    "CAST",
+    "CONSTRAINT",
+    "CREATE",
+    "CROSS",
+    "CUBE",
+    "CURRENT_CATALOG",
+    "CURRENT_DATE",
+    "CURRENT_PATH",
+    "CURRENT_ROLE",
+    "CURRENT_SCHEMA",
+    "CURRENT_TIME",
+    "CURRENT_TIMESTAMP",
+    "CURRENT_USER",
+    "DEALLOCATE",
+    "DELETE",
+    "DESCRIBE",
+    "DISTINCT",
+    "DROP",
+    "ELSE",
+    "END",
+    "ESCAPE",
+    "EXCEPT",
+    "EXECUTE",
+    "EXISTS",
+    "EXTRACT",
+    "FALSE",
+    "FOR",
+    "FROM",
+    "FULL",
+    "GROUP",
+    "GROUPING",
+    "HAVING",
+    "IN",
+    "INNER",
+    "INSERT",
+    "INTERSECT",
+    "INTO",
+    "IS",
+    "JOIN",
+    "JSON_ARRAY",
+    "JSON_EXISTS",
+    "JSON_OBJECT",
+    "JSON_QUERY",
+    "JSON_VALUE",
+    "LEFT",
+    "LIKE",
+    "LISTAGG",
+    "LOCALTIME",
+    "LOCALTIMESTAMP",
+    "NATURAL",
+    "NORMALIZE",
+    "NOT",
+    "NULL",
+    "ON",
+    "OR",
+    "ORDER",
+    "OUTER",
+    "PREPARE",
+    "RECURSIVE",
+    "RIGHT",
+    "ROLLUP",
+    "SELECT",
+    "SKIP",
+    "TABLE",
+    "THEN",
+    "TRIM",
+    "TRUE",
+    "UESCAPE",
+    "UNION",
+    "UNNEST",
+    "USING",
+    "VALUES",
+    "WHEN",
+    "WHERE",
+    "WITH",
+}
 
 
 def _compute_keywords(vendor: Vendor, version: Version) -> Set[str]:
@@ -1029,5 +1116,7 @@ def _compute_keywords(vendor: Vendor, version: Version) -> Set[str]:
         return REDSHIFT_KEYWORDS
     elif vendor is Vendor.ansi:
         return ANSI_KEYWORDS
+    elif vendor is Vendor.trino:
+        return TRINO_KEYWORDS
     else:
         raise NotImplementedError(vendor)
