@@ -334,6 +334,21 @@ def test_cast() -> None:
         == "SELECT CAST(1 AS UNSIGNED INTEGER)\n"
     )
     assert format("select cast(1 as year)") == "SELECT CAST(1 AS YEAR)\n"
+    assert (
+        format("select cast(1 as bigint)", Dialect(Vendor.redshift))
+        == "SELECT CAST(1 AS BIGINT)\n"
+    )
+    assert (
+        format("select cast(1 as bigint)", Dialect(Vendor.trino))
+        == "SELECT CAST(1 AS BIGINT)\n"
+    )
+    assert (
+        format(
+            "select cast('1997-12-17 07:37:16-08'as TIME WITH TIME ZONE)",
+            Dialect(Vendor.redshift),
+        )
+        == "SELECT CAST('1997-12-17 07:37:16-08' AS TIME WITH TIME ZONE)\n"
+    )
 
 
 def test_colon_cast() -> None:
@@ -378,6 +393,20 @@ def test_colon_cast() -> None:
     )
     assert format("select 1 :: real", Dialect(Vendor.redshift)) == "SELECT 1::REAL\n"
     assert format("select 1 :: year", Dialect(Vendor.redshift)) == "SELECT 1::YEAR\n"
+    assert (
+        format("select 1 :: bigint", Dialect(Vendor.redshift)) == "SELECT 1::BIGINT\n"
+    )
+    assert (
+        format("select 1 :: double PRECISION", Dialect(Vendor.redshift))
+        == "SELECT 1::DOUBLE PRECISION\n"
+    )
+    assert (
+        format(
+            "select '1997-12-17 07:37:16-08':: TIME WITH TIME  zone",
+            Dialect(Vendor.redshift),
+        )
+        == "SELECT '1997-12-17 07:37:16-08'::TIME WITH TIME ZONE\n"
+    )
     assert (
         format("select '1' :: double", Dialect(Vendor.redshift))
         == "SELECT '1'::DOUBLE\n"
