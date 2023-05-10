@@ -3,7 +3,6 @@ from sqltree.api import sqltree
 from sqltree.dialect import Dialect, Vendor
 from sqltree.location import Location
 from sqltree.tokenizer import Token, TokenType
-from sqltree.dialect import Dialect, Vendor
 
 T = Token(TokenType.keyword, "x", Location("x", 1, 1))
 
