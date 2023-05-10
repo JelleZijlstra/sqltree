@@ -518,6 +518,10 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.else_clause, add_space=True)
         self.visit(node.end_kw)
 
+    def visit_TypedString(self, node: p.TypedString):
+        self.visit(node.type_name)
+        self.visit(node.string)
+
     def visit_Distinct(self, node: p.Distinct) -> None:
         self.visit(node.distinct_kw)
         self.add_space()
