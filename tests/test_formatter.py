@@ -645,6 +645,45 @@ def test_table_reference() -> None:
     )
 
 
+def test_table_subquery() -> None:
+    assert format("select x from (select a from b) as a", indent=12) == """
+            SELECT x
+            FROM (
+                SELECT a
+                FROM b) AS a
+        """
+    assert format("select x from (select a from b) a", indent=12) == """
+            SELECT x
+            FROM (
+                SELECT a
+                FROM b) a
+        """
+    assert format("select x from (select a from b)", indent=12) == """
+            SELECT x
+            FROM (
+                SELECT a
+                FROM b)
+        """
+    assert format("select x from (select 1)", indent=12) == """
+            SELECT x
+            FROM (
+                SELECT 1)
+        """
+    assert format("select x from (select 1), b", indent=12) == """
+            SELECT x
+            FROM (
+                SELECT 1), b
+        """
+    assert format("select x from (select 1)join b", indent=12) == """
+            SELECT x
+            FROM
+                (
+                    SELECT 1)
+            JOIN
+                b
+        """
+
+
 def test_update() -> None:
     assert (
         format("update x set y = default, z =3 where x=4 order   by z limit 1")
