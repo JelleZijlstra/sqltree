@@ -39,6 +39,9 @@ class Dialect:
     _keywords: Optional[Set[str]] = field(
         compare=False, repr=False, hash=False, init=False, default=None
     )
+    _datatypes: Optional[Set[str]] = field(
+        compare=False, repr=False, hash=False, init=False, default=None
+    )
 
     def __str__(self) -> str:
         name = self.vendor.name
@@ -52,6 +55,13 @@ class Dialect:
         keywords = _compute_keywords(self.vendor, self.version)
         self._keywords = keywords
         return keywords
+
+    def get_datatypes(self) -> Set[str]:
+        if self._datatypes is not None:
+            return self._datatypes
+        datatypes = _compute_datatypes(self.vendor)
+        self._datatypes = datatypes
+        return datatypes
 
     def supports_feature(self, feature: Feature) -> bool:
         value = _FEATURES[feature].get(self.vendor, True)
@@ -1102,6 +1112,187 @@ TRINO_KEYWORDS = {
     "WITH",
 }
 
+# https://dev.mysql.com/doc/refman/8.0/en/data-types.html
+MYSQL_DATATYPES = {
+    "TINYINT",
+    "SMALLINT",
+    "MEDIUMINT",
+    "INT",
+    "INTEGER",
+    "BIGINT",
+    "DECIMAL",
+    "NUMERIC",
+    "FLOAT",
+    "DOUBLE",
+    "REAL",
+    "DOUBLE PRECISION",
+    "BIT",
+    "DATE",
+    "DATETIME",
+    "TIMESTAMP",
+    "TIME",
+    "YEAR",
+    "CHAR",
+    "VARCHAR",
+    "BINARY",
+    "VARBINARY",
+    "BLOB",
+    "TINYBLOB",
+    "MEDIUMBLOB",
+    "LONGBLOB",
+    "TEXT",
+    "TINYTEXT",
+    "MEDIUMTEXT",
+    "LONGTEXT",
+    "LONG VARCHAR",
+    "LONG",
+    "LONGVARBINARY",
+    "LONGVARCHAR",
+    "ENUM",
+    "SET",
+    "JSON",
+    "GEOMETRY",
+    "POINT",
+    "LINESTRING",
+    "POLYGON",
+    "MULTIPOINT",
+    "MULTILINESTRING",
+    "MULTIPOLYGON",
+    "GEOMETRYCOLLECTION",
+}
+
+# https://docs.aws.amazon.com/redshift/latest/dg/c_Supported_data_types.html
+REDSHIFT_DATATYPES = {
+    "SMALLINT",
+    "INT2",  # alias of SMALLINT
+    "INTEGER",
+    "INT",  # alias of INTEGER
+    "INT4",  # alias of INTEGER
+    "BIGINT",
+    "INT8",  # alias of BIGINT
+    "DECIMAL",
+    "NUMERIC",  # alias of DECIMAL
+    "REAL",
+    "FLOAT4",  # alias of REAL
+    "DOUBLE PRECISION",
+    "FLOAT8",  # alias of DOUBLE PRECISION
+    "FLOAT",  # alias of DOUBLE PRECISION
+    "BOOLEAN",
+    "BOOL",  # alias of BOOLEAN
+    "CHAR",
+    "CHARACTER",  # alias of CHAR
+    "NCHAR",  # alias of CHAR
+    "BPCHAR",  # alias of CHAR
+    "VARCHAR",
+    "CHARACTER VARYING",  # alias of VARCHAR
+    "NVARCHAR",  # alias of VARCHAR
+    "TEXT",  # alias of VARCHAR
+    "DATE",
+    "TIMESTAMP",
+    "TIMESTAMP WITHOUT TIME ZONE",  # alias of TIMESTAMP
+    "TIMESTAMPTZ",
+    "TIMESTAMP WITH TIME ZONE",  # alias of TIMESTAMPTZ
+    "GEOMETRY",
+    "GEOGRAPHY",
+    "HLLSKETCH",
+    "SUPER",
+    "TIME",
+    "TIME WITHOUT TIME ZONETIMETZ",  # alias of TIME
+    "TIME WITH TIME ZONE",  # alias of TIMETZ
+    "VARBYTE",
+    "VARBINARY",  # alias of VARBYTE
+    "BINARY VARYING",  # alias of VARBYTE
+}
+
+# https://prestodb.io/docs/current/language/types.html
+PRESTO_DATATYPES = {
+    "BOOLEAN",
+    "TINYINT",
+    "SMALLINT",
+    "INTEGER",
+    "BIGINT",
+    "REAL",
+    "DOUBLE",
+    "DECIMAL",
+    "VARCHAR",
+    "CHAR",
+    "VARBINARY",
+    "JSON",
+    "DATE",
+    "TIME",
+    "TIMESTAMP",
+    "ARRAY",
+    "MAP",
+    "ROW",
+    "IPADDRESS",
+    "UUID",
+    "IPPREFIX",
+    "HyperLogLog",
+    "P4HyperLogLog",
+    "KHyperLogLog",
+    "QDigest",
+    "TDigest",
+}
+# https://en.wikipedia.org/wiki/SQL#SQL_data_types
+ANSI_DATATYPES = {
+    "ARRAY",
+    "MULTISET",
+    "ROW",
+    "CHAR",
+    "VARCHAR",
+    "CLOB",
+    "NCHAR",
+    "NCHAR VARYING",
+    "NCLOB",
+    "BINARY",
+    "VARBINARY",
+    "BLOB",
+    "NUMERIC",
+    "DECIMAL",
+    "SMALLINT",
+    "INTEGER",
+    "BIGINT",
+    "FLOAT",
+    "REAL",
+    "DOUBLE PRECISION",
+    "DECFLOAT",
+    "DATE",
+    "TIME",
+    "TIMESTAMP",
+    "INTERVAL",
+    "BOOLEAN",
+    "XML",
+    "JSON",
+}
+# https://trino.io/docs/current/language/types.html
+TRINO_DATATYPES = {
+    "BOOLEAN",
+    "TINYINT",
+    "SMALLINT",
+    "INTEGER",
+    "BIGINT",
+    "REAL",
+    "DOUBLE",
+    "VARCHAR",
+    "CHAR",
+    "VARBINARY",
+    "JSON",
+    "DATE",
+    "TIME",
+    "TIMESTAMP",
+    "INTERVAL",
+    "ARRAY",
+    "MAP",
+    "ROW",
+    "IPADDRESS",
+    "UUID",
+    "HyperLogLog",
+    "P4HyperLogLog",
+    "SetDigest",
+    "QDigest",
+    "TDigest",
+}
+
 
 def _compute_keywords(vendor: Vendor, version: Version) -> Set[str]:
     if vendor is Vendor.mysql:
@@ -1118,5 +1309,20 @@ def _compute_keywords(vendor: Vendor, version: Version) -> Set[str]:
         return ANSI_KEYWORDS
     elif vendor is Vendor.trino:
         return TRINO_KEYWORDS
+    else:
+        raise NotImplementedError(vendor)
+
+
+def _compute_datatypes(vendor: Vendor) -> Set[str]:
+    if vendor is Vendor.mysql:
+        return MYSQL_DATATYPES
+    elif vendor is Vendor.presto:
+        return PRESTO_DATATYPES
+    elif vendor is Vendor.redshift:
+        return REDSHIFT_DATATYPES
+    elif vendor is Vendor.ansi:
+        return ANSI_DATATYPES
+    elif vendor is Vendor.trino:
+        return TRINO_DATATYPES
     else:
         raise NotImplementedError(vendor)

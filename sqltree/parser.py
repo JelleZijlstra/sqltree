@@ -190,7 +190,7 @@ CastType = Union[FunctionCall, CharType, Keyword, KeywordSequence]
 
 @dataclass
 class Cast(Expression):
-    cast_kw: Identifier = field(repr=False, compare=False)
+    cast_kw: KeywordIdentifier = field(repr=False, compare=False)
     left_paren: Punctuation = field(repr=False, compare=False)
     expr: Expression
     as_kw: Keyword = field(repr=False, compare=False)
@@ -2353,49 +2353,58 @@ def _parse_char_set_info(p: Parser) -> Optional[CharsetInfo]:
     return CharsetInfo(character_kw, set_kw, charset)
 
 
+_BASIC_CAST_KEYWORD = [
+    "BINARY",
+    "CHAR",
+    "DATE",
+    "DATETIME",
+    "DECIMAL",
+    "DOUBLE",
+    "FLOAT",
+    "JSON",
+    "NCHAR",
+    "REAL",
+    "SIGNED",
+    "TIME",
+    "UNSIGNED",
+    "YEAR",
+]
+
+
 def _parse_cast_type(p: Parser) -> CastType:
-    kw = _expect_one_of_keywords(
+    kwseq = _expect_one_of_kwseqs(
         p,
-        [
-            "BINARY",
-            "CHAR",
-            "DATE",
-            "DATETIME",
-            "DECIMAL",
-            "DOUBLE",
-            "FLOAT",
-            "JSON",
-            "NCHAR",
-            "REAL",
-            "SIGNED",
-            "TIME",
-            "UNSIGNED",
-            "YEAR",
-        ],
+        sorted(
+            [kw.split() for kw in _BASIC_CAST_KEYWORD]
+            + [datatype.split() for datatype in p.dialect.get_datatypes()],
+            reverse=True,
+        ),
     )
-    if kw.text in ("DATE", "DOUBLE", "JSON", "REAL", "YEAR"):
-        return kw
-    elif kw.text in ("SIGNED", "UNSIGNED"):
-        int_kw = _maybe_consume_keyword(p, "INTEGER")
-        if int_kw is None:
-            return kw
-        else:
-            return KeywordSequence([kw, int_kw])
-    elif _next_is_punctuation(p, "("):
-        call = _parse_function_call(p, KeywordIdentifier(kw))
-        if kw.text == "CHAR":
+    if len(kwseq.keywords) == 1:
+        kw = kwseq.keywords[0]
+        if kw.text.upper() in ("SIGNED", "UNSIGNED"):
+            int_kw = _maybe_consume_keyword(p, "INTEGER")
+            if int_kw is None:
+                return kwseq.keywords[0]
+            else:
+                return KeywordSequence([kw, int_kw])
+        elif _next_is_punctuation(p, "("):
+            call = _parse_function_call(p, KeywordIdentifier(kw))
+            if kw.text.upper() == "CHAR":
+                charset = _parse_char_set_info_or_shortcut(p)
+                return CharType(call, charset)
+            else:
+                return call
+        elif kw.text.upper() == "CHAR":
             charset = _parse_char_set_info_or_shortcut(p)
-            return CharType(call, charset)
+            return CharType(kwseq.keywords[0], charset)
         else:
-            return call
-    elif kw.text == "CHAR":
-        charset = _parse_char_set_info_or_shortcut(p)
-        return CharType(kw, charset)
+            return kw
     else:
-        return kw
+        return kwseq
 
 
-def _parse_cast(cast_kw: Identifier, p: Parser) -> Cast:
+def _parse_cast(cast_kw: KeywordIdentifier, p: Parser) -> Cast:
     left_paren = _expect_punctuation(p, "(")
     expr = _parse_expression(p)
     as_kw = _expect_keyword(p, "AS")
@@ -2459,7 +2468,7 @@ def _parse_leading_simple_expression(p: Parser) -> Expression:
     elif token.typ is TokenType.identifier:
         keyword_text = token.text.upper()
         if keyword_text == "CAST":
-            return _parse_cast(Identifier(token, keyword_text), p)
+            return _parse_cast(KeywordIdentifier(Keyword(token, keyword_text)), p)
         elif keyword_text == "GROUP_CONCAT":
             return _parse_group_concat(Identifier(token, keyword_text), p)
         expr = Identifier(token, token.text)
@@ -2475,6 +2484,8 @@ def _parse_leading_simple_expression(p: Parser) -> Expression:
         else:
             return StringLiteral(token, text)
     elif token.typ is TokenType.keyword:
+        if token.text == "CAST":
+            return _parse_cast(KeywordIdentifier(Keyword(token, token.text)), p)
         if token.text == "CASE":
             p.pi.wind_back()
             return _parse_case_expression(p)
@@ -2588,7 +2599,7 @@ def _expect_one_of_keywords(p: Parser, keywords: Sequence[str]) -> Keyword:
     token = _next_or_else(p, expected)
     for keyword in keywords:
         if _token_is_keyword(p, token, keyword):
-            return Keyword(token, token.text.upper())
+            return Keyword(token, token.text)
     raise ParseError.from_unexpected_token(token, expected)
 
 
