@@ -1,5 +1,6 @@
 from sqltree import parser as p
 from sqltree.api import sqltree
+from sqltree.dialect import Dialect, Vendor
 from sqltree.location import Location
 from sqltree.tokenizer import Token, TokenType
 
@@ -97,6 +98,117 @@ def test() -> None:
         p.Keyword(T, "SELECT"),
         [],
         [p.WithTrailingComma(p.SelectExpr(p.Star(T), None, None))],
+        None,
+        p.FromClause(
+            p.Keyword(T, "FROM"),
+            [
+                p.WithTrailingComma(
+                    p.SimpleTableFactor(p.SimpleTableName(p.Identifier(T, "a")))
+                )
+            ],
+        ),
+    )
+
+    tree = sqltree("SELECT a::char FROM a", dialect=Dialect(Vendor.redshift))
+    assert tree == p.Select(
+        (),
+        None,
+        p.Keyword(T, "SELECT"),
+        [],
+        [
+            p.WithTrailingComma(
+                p.SelectExpr(
+                    p.ColonCast(
+                        expr=p.Identifier(T, "a"),
+                        double_colon=p.Punctuation(T, "::"),
+                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                    ),
+                    None,
+                    None,
+                )
+            )
+        ],
+        None,
+        p.FromClause(
+            p.Keyword(T, "FROM"),
+            [
+                p.WithTrailingComma(
+                    p.SimpleTableFactor(p.SimpleTableName(p.Identifier(T, "a")))
+                )
+            ],
+        ),
+    )
+
+    tree = sqltree(
+        """SELECT 
+            (a)::char, 
+            case when 1 then 1 else 2 end::char, 
+            'a'::char 
+        FROM a""",
+        dialect=Dialect(Vendor.redshift),
+    )
+    assert tree == p.Select(
+        (),
+        None,
+        p.Keyword(T, "SELECT"),
+        [],
+        [
+            p.WithTrailingComma(
+                p.SelectExpr(
+                    p.ColonCast(
+                        expr=p.Parenthesized(
+                            p.Punctuation(T, "("),
+                            p.Identifier(T, "a"),
+                            p.Punctuation(T, ")"),
+                        ),
+                        double_colon=p.Punctuation(T, "::"),
+                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                    ),
+                    None,
+                    None,
+                ),
+                p.Punctuation(T, ","),
+            ),
+            p.WithTrailingComma(
+                p.SelectExpr(
+                    p.ColonCast(
+                        expr=p.CaseExpression(
+                            p.Keyword(T, "CASE"),
+                            None,
+                            [
+                                p.WhenThen(
+                                    p.Keyword(T, "WHEN"),
+                                    p.NumericLiteral(T, "1"),
+                                    p.Keyword(T, "THEN"),
+                                    p.NumericLiteral(T, "1"),
+                                )
+                            ],
+                            p.ElseClause(
+                                p.Keyword(T, "ELSE"), p.NumericLiteral(T, "2")
+                            ),
+                            p.Keyword(T, "END"),
+                        ),
+                        double_colon=p.Punctuation(T, "::"),
+                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                    ),
+                    None,
+                    None,
+                ),
+                p.Punctuation(T, ","),
+            ),
+            p.WithTrailingComma(
+                p.SelectExpr(
+                    p.ColonCast(
+                        expr=p.StringLiteral(T, "a"),
+                        double_colon=p.Punctuation(T, "::"),
+                        type_name=p.CharType(p.Keyword(T, "CHAR"), None),
+                    ),
+                    None,
+                    None,
+                ),
+                None,
+            ),
+        ],
         None,
         p.FromClause(
             p.Keyword(T, "FROM"),
