@@ -664,7 +664,7 @@ class Formatter(Visitor[None]):
         self.maybe_visit(node.lateral_kw, add_space=True)
         self.visit(node.table_subquery)
         self.maybe_visit(node.as_kw, else_write="AS", add_space=True)
-        self.visit(node.alias)
+        self.maybe_visit(node.alias)
         if node.col_list:
             self.maybe_visit(node.left_paren, else_write="(")
             self.write_comma_list(node.col_list)
@@ -760,7 +760,11 @@ def _get_lines_for_field(
         types = {t for t in args if t is not NoneType}
     else:
         is_optional = False
-        types = {field_obj.type}
+        if isinstance(field_obj.type, str):
+            obj_type = getattr(p, field_obj.type)
+        else:
+            obj_type = field_obj.type
+        types = {obj_type}
     if (
         types
         <= {

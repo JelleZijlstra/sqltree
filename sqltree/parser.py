@@ -385,7 +385,7 @@ class SubqueryFactor(Node):
     lateral_kw: Optional[Keyword]
     table_subquery: "Subselect"
     as_kw: Optional[Keyword]
-    alias: Identifier
+    alias: Optional[Identifier]
     left_paren: Optional[Punctuation]
     col_list: Sequence[WithTrailingComma[Identifier]]
     right_paren: Optional[Punctuation]
@@ -1103,7 +1103,10 @@ def _parse_subquery_factor(
 ) -> SubqueryFactor:
     subselect = _parse_subselect(p, require_parens=True)
     as_kw = _maybe_consume_keyword(p, "AS")
-    alias = _parse_identifier(p)
+    if as_kw:
+        alias = _parse_identifier(p)
+    else:
+        alias = _maybe_parse_identifier(p)
     left_paren = _maybe_consume_punctuation(p, "(")
     if left_paren is not None:
         col_list = _parse_comma_separated(p, _parse_identifier)
