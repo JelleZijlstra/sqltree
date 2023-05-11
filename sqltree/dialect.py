@@ -1202,6 +1202,7 @@ REDSHIFT_DATATYPES = {
     "VARBYTE",
     "VARBINARY",  # alias of VARBYTE
     "BINARY VARYING",  # alias of VARBYTE
+    "INTERVAL",
 }
 
 # https://prestodb.io/docs/current/language/types.html
