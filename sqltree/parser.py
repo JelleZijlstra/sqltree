@@ -2540,6 +2540,14 @@ def _parse_leading_simple_expression(p: Parser) -> Expression:
         elif _next_is_punctuation(p, "("):
             kw = Keyword(token, token.text)
             return _parse_function_call(p, KeywordIdentifier(kw))
+        # Some data types (e.g. TIMESTAMP') are also keywords for some dialects
+        # Might need a better way to handle this
+        p.pi.wind_back()
+        maybe_cast_type = _maybe_consume_one_of_casttypes(p)
+        if maybe_cast_type:
+            return _parse_typed_string(maybe_cast_type, p)
+        else:
+            p.pi.advance()
     raise ParseError.from_unexpected_token(token, "expression")
 
 

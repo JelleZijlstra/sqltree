@@ -448,6 +448,26 @@ def test_typed_string() -> None:
     assert (
         format("select nchar(5)'1'", Dialect(Vendor.redshift)) == "SELECT NCHAR(5)'1'\n"
     )
+    assert format("select timestamp '1'") == "SELECT TIMESTAMP'1'\n"
+    assert (
+        format("select timestamp '1'", Dialect(Vendor.redshift))
+        == "SELECT TIMESTAMP'1'\n"
+    )
+    assert (
+        format("select interval '1 second'", Dialect(Vendor.redshift))
+        == "SELECT INTERVAL'1 second'\n"
+    )
+    assert (
+        format(
+            (
+                "select DATE_TRUNC('day', TIMESTAMP 'epoch' + (time_column / 100000) *"
+                " INTERVAL '1 second') from a"
+            ),
+            Dialect(Vendor.redshift),
+        )
+        == "SELECT DATE_TRUNC('day', TIMESTAMP'epoch' + (time_column / 100000) *"
+        " INTERVAL'1 second')\nFROM a\n"
+    )
 
 
 def test_group_concat() -> None:
