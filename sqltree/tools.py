@@ -4,7 +4,6 @@ Tools for working with SQL.
 
 """
 
-
 from typing import Sequence
 
 from .api import sqltree
