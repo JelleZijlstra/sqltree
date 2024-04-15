@@ -12,6 +12,7 @@ Makes the following changes:
 - Adds an EOF token at the end
 
 """
+
 from typing import Iterable, List
 
 from .location import Location
