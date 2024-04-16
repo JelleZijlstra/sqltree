@@ -2,7 +2,6 @@
 Fixit rule for formatting SQL.
 """
 
-
 import libcst as cst
 from fixit import CstLintRule, InvalidTestCase as Invalid, ValidTestCase as Valid
 from libcst.helpers import get_full_name_for_node
@@ -19,13 +18,16 @@ class SqlFormatRule(CstLintRule):
     MESSAGE = "Reformat SQL"
 
     VALID = [
-        Valid('''
+        Valid(
+            '''
             sql = """
                 SELECT *
                 FROM x
             """
-            '''),
-        Valid('''
+            '''
+        ),
+        Valid(
+            '''
             def f():
                 sql = """
                     SELECT *
@@ -40,7 +42,8 @@ class SqlFormatRule(CstLintRule):
                        SELECT y
                        FROM z
                    """
-            '''),
+            '''
+        ),
     ]
 
     INVALID = [
@@ -80,7 +83,11 @@ class SqlFormatRule(CstLintRule):
 
     def visit_Assign(self, node: cst.Assign) -> None:
         full_name = get_full_name_for_node(node.targets[0].target)
-        if full_name == "sql" and isinstance(node.value, cst.SimpleString):
+        if (
+            full_name == "sql"
+            and isinstance(node.value, cst.SimpleString)
+            and isinstance(node.value.evaluated_value, str)
+        ):
             query = node.value.evaluated_value
             try:
                 formatted = format(query, indent=self.current_indent + 4)
