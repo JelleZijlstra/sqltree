@@ -83,7 +83,11 @@ class SqlFormatRule(CstLintRule):
 
     def visit_Assign(self, node: cst.Assign) -> None:
         full_name = get_full_name_for_node(node.targets[0].target)
-        if full_name == "sql" and isinstance(node.value, cst.SimpleString):
+        if (
+            full_name == "sql"
+            and isinstance(node.value, cst.SimpleString)
+            and isinstance(node.value.evaluated_value, str)
+        ):
             query = node.value.evaluated_value
             try:
                 formatted = format(query, indent=self.current_indent + 4)
