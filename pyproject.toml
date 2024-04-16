@@ -20,7 +20,7 @@ skip-magic-trailing-comma = true
 preview = true
 
 [project.requires-extra]
-fixit = ["fixit"]
+fixit = ["fixit<2"]
 
 [tool.isort]
 profile = "black"
