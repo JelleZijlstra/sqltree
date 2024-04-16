@@ -141,30 +141,42 @@ def test_select() -> None:
         format("select all high_priority sql_no_cache x from y")
         == "SELECT ALL HIGH_PRIORITY SQL_NO_CACHE x\nFROM y\n"
     )
-    assert format("select x from y where x = (select y from x)", indent=12) == """
+    assert (
+        format("select x from y where x = (select y from x)", indent=12)
+        == """
             SELECT x
             FROM y
             WHERE x = (
                 SELECT y
                 FROM x)
         """
-    assert format("select x from y where x in (select y from x)", indent=12) == """
+    )
+    assert (
+        format("select x from y where x in (select y from x)", indent=12)
+        == """
             SELECT x
             FROM y
             WHERE x IN (
                 SELECT y
                 FROM x)
         """
-    assert format("select x from y where x in (a, b, c)", indent=12) == """
+    )
+    assert (
+        format("select x from y where x in (a, b, c)", indent=12)
+        == """
             SELECT x
             FROM y
             WHERE x IN (a, b, c)
         """
-    assert format("select x from y where x in {lst}", indent=12) == """
+    )
+    assert (
+        format("select x from y where x in {lst}", indent=12)
+        == """
             SELECT x
             FROM y
             WHERE x IN {lst}
         """
+    )
     assert (
         format("select case x when y then z else alpha end")
         == "SELECT CASE x WHEN y THEN z ELSE alpha END\n"
@@ -571,7 +583,9 @@ def test_multi_split() -> None:
         AND time >= %s
         GROUP BY def
     """
-    assert format(sql, indent=12) == """
+    assert (
+        format(sql, indent=12)
+        == """
             SELECT
                 ghi,
                 COUNT(CASE WHEN result = %s THEN 1 END) AS count,
@@ -582,6 +596,7 @@ def test_multi_split() -> None:
                 AND time >= %s
             GROUP BY def
         """
+    )
 
 
 def test_table_reference() -> None:
@@ -605,14 +620,19 @@ def test_table_reference() -> None:
     assert format("select x from (a, b)") == "SELECT x\nFROM (a, b)\n"
     assert format("select x from a, b") == "SELECT x\nFROM a, b\n"
 
-    assert format("select x from a join b", indent=12) == """
+    assert (
+        format("select x from a join b", indent=12)
+        == """
             SELECT x
             FROM
                 a
             JOIN
                 b
         """
-    assert format("select x from a left join b on 1", indent=12) == """
+    )
+    assert (
+        format("select x from a left join b on 1", indent=12)
+        == """
             SELECT x
             FROM
                 a
@@ -620,14 +640,20 @@ def test_table_reference() -> None:
                 b
             ON 1
         """
-    assert format("select x from a cross join b", indent=12) == """
+    )
+    assert (
+        format("select x from a cross join b", indent=12)
+        == """
             SELECT x
             FROM
                 a
             CROSS JOIN
                 b
         """
-    assert format("select x from a join b join c", indent=12) == """
+    )
+    assert (
+        format("select x from a join b join c", indent=12)
+        == """
             SELECT x
             FROM
                 a
@@ -636,7 +662,10 @@ def test_table_reference() -> None:
             JOIN
                 c
         """
-    assert format("select x from a join b on x = y join c on y = x", indent=12) == """
+    )
+    assert (
+        format("select x from a join b on x = y join c on y = x", indent=12)
+        == """
             SELECT x
             FROM
                 a
@@ -647,6 +676,7 @@ def test_table_reference() -> None:
                 c
             ON y = x
         """
+    )
     assert (
         format("select x from a join b on x = y join c on y = x and c = d", indent=12)
         == """
