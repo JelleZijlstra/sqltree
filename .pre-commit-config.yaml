@@ -14,6 +14,6 @@ ci:
     autofix_commit_msg: '[pre-commit.ci] auto fixes from pre-commit.com hooks'
     autofix_prs: true
     autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
-    autoupdate_schedule: weekly
+    autoupdate_schedule: quarterly
     skip: []
     submodules: false
